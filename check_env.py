@@ -43,7 +43,7 @@ env_vars = {
         ('MINIO_SECURE', 'False'),
     ],
     'AI 後端配置': [
-        ('AI_BACKEND_URL', 'http://localhost:8080/api/remove_bg'),
+        ('AI_BACKEND_URL', 'http://localhost:8002/api/remove_bg'),
     ],
     '其他配置': [
         ('MAX_UPLOAD_SIZE', '10485760'),

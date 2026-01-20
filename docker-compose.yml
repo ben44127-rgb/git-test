@@ -47,12 +47,47 @@ services:
 
       # AI 後端配置
       # 如果 AI 服務也在 Docker 中，使用服務名稱
-      # 如果在宿主機上，使用 host.docker.internal
-      AI_BACKEND_URL: http://192.168.233.128:8002/api/remove_bg
+      # 如果在宿主機上，使用 host.docker.internal (Mac/Windows) 或 172.17.0.1 (Linux)
+      AI_BACKEND_URL: ${AI_BACKEND_URL:-http://host.docker.internal:8002/api/remove_bg}
 
       # Django 配置
       DEBUG: ${DEBUG:-False}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-this-secret-key-in-production}
+
+      # 開發模式配置（啟用 hot reload）
+      # 設為 true 時使用 Django runserver 並掛載程式碼目錄
+      # 設為 false 時使用 Gunicorn 生產伺服器
+      DJANGO_DEV_MODE: ${DJANGO_DEV_MODE:-false}
+    volumes:
+      # 掛載程式碼目錄以支援 hot reload（開發模式）
+      - ./api:/app/api
+      - ./config:/app/config
+      - ./manage.py:/app/manage.py
+      # 日誌目錄
+      - ./logs:/app/logs
+    # 根據 DJANGO_DEV_MODE 環境變數決定啟動命令
+    # 開發模式：使用 Django runserver（支援 hot reload）
+    # 生產模式：使用 Dockerfile 中的預設命令（Gunicorn）
+    command: >
+      sh -c "
+        if [ \"$$DJANGO_DEV_MODE\" = \"true\" ]; then
+          echo '🔧 開發模式：Hot Reload 已啟用';
+          echo '⏳ 等待 MinIO 服務...';
+          sleep 5;
+          echo '🔄 運行數據庫遷移...';
+          python3 manage.py migrate --noinput;
+          echo '🚀 啟動 Django 開發伺服器...';
+          python3 manage.py runserver 0.0.0.0:30000;
+        else
+          echo '🚀 生產模式：使用 Gunicorn';
+          echo '⏳ 等待 MinIO 服務...';
+          sleep 5;
+          echo '🔄 運行數據庫遷移...';
+          python3 manage.py migrate --noinput;
+          echo '✅ 啟動 Gunicorn 伺服器...';
+          gunicorn config.wsgi:application --bind 0.0.0.0:30000 --workers 4 --timeout 300;
+        fi
+      "
     depends_on:
       - minio
     networks:
