@@ -1,0 +1,82 @@
+# ==========================================
+# Docker Compose 配置文件
+# ==========================================
+# 這個文件定義了多個服務的配置，使用 docker-compose 可以一次啟動所有服務
+
+version: '3.8'
+
+services:
+  # ========== MinIO 對象存儲服務 ==========
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000" # MinIO API 端口
+      - "9001:9001" # MinIO 管理控制台端口
+    environment:
+      MINIO_ROOT_USER: minioadmin # 管理員帳號
+      MINIO_ROOT_PASSWORD: minioadmin # 管理員密碼
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data # 持久化數據
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ========== Django 後端服務 ==========
+  backend:
+    build: .
+    container_name: django-backend
+    ports:
+      - "30000:30000" # API 端口
+    environment:
+      # MinIO 配置（Docker 內部使用服務名稱）
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET_NAME: processed-images
+      MINIO_SECURE: "false"
+
+      # AI 後端配置
+      # 如果 AI 服務也在 Docker 中，使用服務名稱
+      # 如果在宿主機上，使用 host.docker.internal
+      AI_BACKEND_URL: http://host.docker.internal:8080/api/remove_bg
+
+      # Django 配置
+      DEBUG: "False"
+      DJANGO_SECRET_KEY: "change-this-secret-key-in-production"
+    depends_on:
+      - minio
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # ========== 模擬 AI 服務（測試用） ==========
+  # 這個服務僅用於測試，生產環境不需要
+  # 要啟動這個服務，使用：docker-compose --profile testing up
+  mock-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-ai
+    container_name: mock-ai-server
+    ports:
+      - "8080:8080"
+    networks:
+      - app-network
+    profiles:
+      - testing # 只在 testing profile 中啟動
+    restart: unless-stopped
+
+# ========== 網絡配置 ==========
+networks:
+  app-network:
+    driver: bridge
+
+# ========== 數據卷配置 ==========
+volumes:
+  minio_data:
+    driver: local
