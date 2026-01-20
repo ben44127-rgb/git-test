@@ -174,7 +174,7 @@ MINIO_BUCKET_NAME = os.getenv('MINIO_BUCKET_NAME', 'processed-images')
 MINIO_SECURE = os.getenv('MINIO_SECURE', 'False') == 'True'
 
 # AI 後端服務配置
-AI_BACKEND_URL = os.getenv('AI_BACKEND_URL', 'http://localhost:8080/api/remove_bg')
+AI_BACKEND_URL = os.getenv('AI_BACKEND_URL', 'http://localhost:8002/api/remove_bg')
 
 # 檔案上傳配置
 UPLOAD_FOLDER = BASE_DIR / 'output'
