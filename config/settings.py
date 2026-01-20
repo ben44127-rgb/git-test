@@ -1,60 +1,68 @@
 """
 Django settings for image processing backend.
-Django 图像处理后端的设置配置文件
+Django 圖像處理後端的設定配置檔案
 """
 import os
 from pathlib import Path
-from dotenv import load_dotenv
-
-# 加载环境变量文件
-load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-# 构建项目内部路径，比如: BASE_DIR / 'subdir'
+# 建構專案內部路徑，比如: BASE_DIR / 'subdir'
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# 載入環境變數檔案
+# 確保從專案根目錄載入 .env 檔案
+from dotenv import load_dotenv
+env_path = BASE_DIR / '.env'
+if env_path.exists():
+    load_dotenv(env_path)
+    print(f"✅ 已載入環境變數檔案: {env_path}")
+else:
+    # Docker 環境中可能直接使用環境變數，不需要 .env 檔案
+    load_dotenv()  # 嘗試從預設位置載入
+    print("⚠️  未找到 .env 檔案，使用預設環境變數或系統環境變數")
+
 # SECURITY WARNING: keep the secret key used in production secret!
-# 安全警告：在生产环境中保密密钥必须保密！
+# 安全警告：在生產環境中保密金鑰必須保密！
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-this-in-production-123456789')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-# 安全警告：在生产环境中不要开启调试模式！
+# 安全警告：在生產環境中不要開啟除錯模式！
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
-# 允许的主机列表
-# 在生产环境中，应该设置为具体的域名
-ALLOWED_HOSTS = ['*']  # 开发环境允许所有主机，生产环境需要修改
+# 允許的主機清單
+# 在生產環境中，應該設定為具體的域名
+ALLOWED_HOSTS = ['*']  # 開發環境允許所有主機，生產環境需要修改
 
 # Application definition
-# 应用程序定义
+# 應用程式定義
 INSTALLED_APPS = [
-    'django.contrib.admin',          # Django 管理后台
-    'django.contrib.auth',           # 认证系统
-    'django.contrib.contenttypes',   # 内容类型框架
-    'django.contrib.sessions',       # 会话框架
-    'django.contrib.messages',       # 消息框架
-    'django.contrib.staticfiles',    # 静态文件管理
-    'corsheaders',                   # 跨域资源共享(CORS)支持
-    'api',                           # 我们的 API 应用
+    'django.contrib.admin',          # Django 管理後台
+    'django.contrib.auth',           # 認證系統
+    'django.contrib.contenttypes',   # 內容類型框架
+    'django.contrib.sessions',       # 會話框架
+    'django.contrib.messages',       # 訊息框架
+    'django.contrib.staticfiles',    # 靜態檔案管理
+    'corsheaders',                   # 跨域資源共享(CORS)支援
+    'api',                           # 我們的 API 應用
 ]
 
-# 中间件配置
-# 中间件是处理请求和响应的钩子
+# 中間件配置
+# 中間件是處理請求和響應的鉤子
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',      # 安全中间件
-    'corsheaders.middleware.CorsMiddleware',             # CORS 中间件（必须在 CommonMiddleware 之前）
-    'django.contrib.sessions.middleware.SessionMiddleware',  # 会话中间件
-    'django.middleware.common.CommonMiddleware',         # 通用中间件
-    'django.middleware.csrf.CsrfViewMiddleware',         # CSRF 保护中间件
-    'django.contrib.auth.middleware.AuthenticationMiddleware',  # 认证中间件
-    'django.contrib.messages.middleware.MessageMiddleware',  # 消息中间件
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',  # 点击劫持保护
+    'django.middleware.security.SecurityMiddleware',      # 安全中間件
+    'corsheaders.middleware.CorsMiddleware',             # CORS 中間件（必須在 CommonMiddleware 之前）
+    'django.contrib.sessions.middleware.SessionMiddleware',  # 會話中間件
+    'django.middleware.common.CommonMiddleware',         # 通用中間件
+    'django.middleware.csrf.CsrfViewMiddleware',         # CSRF 保護中間件
+    'django.contrib.auth.middleware.AuthenticationMiddleware',  # 認證中間件
+    'django.contrib.messages.middleware.MessageMiddleware',  # 訊息中間件
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',  # 點擊劫持保護
 ]
 
 # URL 配置
 ROOT_URLCONF = 'config.urls'
 
-# 模板配置
+# 範本配置
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -71,11 +79,11 @@ TEMPLATES = [
     },
 ]
 
-# WSGI 应用配置
+# WSGI 應用配置
 WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
-# 数据库配置（这个应用不需要数据库，使用 SQLite 作为占位）
+# 資料庫配置（這個應用不需要資料庫，使用 SQLite 作為占位）
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -84,7 +92,7 @@ DATABASES = {
 }
 
 # Password validation
-# 密码验证（本应用不涉及用户认证，保留默认配置）
+# 密碼驗證（本應用不涉及使用者認證，保留預設配置）
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -101,38 +109,38 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # Internationalization
-# 国际化配置
-LANGUAGE_CODE = 'zh-hans'  # 简体中文
-TIME_ZONE = 'Asia/Shanghai'  # 上海时区
+# 國際化配置
+LANGUAGE_CODE = 'zh-hans'  # 簡體中文
+TIME_ZONE = 'Asia/Shanghai'  # 上海時區
 USE_I18N = True
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
-# 静态文件配置
+# 靜態檔案配置
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Default primary key field type
-# 默认主键字段类型
+# 預設主鍵欄位類型
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ============================================
-# CORS (跨域资源共享) 配置
+# CORS (跨域資源共享) 配置
 # ============================================
-# 允许所有来源进行跨域请求（开发环境）
-# 生产环境应该设置为具体的前端域名
+# 允許所有來源進行跨域請求（開發環境）
+# 生產環境應該設定為具體的前端域名
 CORS_ALLOW_ALL_ORIGINS = True
 
-# 或者使用白名单（生产环境推荐）：
+# 或者使用白名單（生產環境推薦）：
 # CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:5173",  # Vite 开发服务器
+#     "http://localhost:5173",  # Vite 開發伺服器
 #     "http://127.0.0.1:5173",
 # ]
 
-# 允许携带认证信息（如 cookies）
+# 允許攜帶認證資訊（如 cookies）
 CORS_ALLOW_CREDENTIALS = True
 
-# 允许的 HTTP 方法
+# 允許的 HTTP 方法
 CORS_ALLOW_METHODS = [
     'GET',
     'POST',
@@ -142,7 +150,7 @@ CORS_ALLOW_METHODS = [
     'OPTIONS',
 ]
 
-# 允许的请求头
+# 允許的請求標頭
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -156,31 +164,31 @@ CORS_ALLOW_HEADERS = [
 ]
 
 # ============================================
-# 自定义配置：MinIO 和 AI 后端
+# 自定義配置：MinIO 和 AI 後端
 # ============================================
-# MinIO 对象存储配置
+# MinIO 物件儲存配置
 MINIO_ENDPOINT = os.getenv('MINIO_ENDPOINT', 'localhost:9000')
 MINIO_ACCESS_KEY = os.getenv('MINIO_ACCESS_KEY', 'minioadmin')
 MINIO_SECRET_KEY = os.getenv('MINIO_SECRET_KEY', 'minioadmin')
 MINIO_BUCKET_NAME = os.getenv('MINIO_BUCKET_NAME', 'processed-images')
 MINIO_SECURE = os.getenv('MINIO_SECURE', 'False') == 'True'
 
-# AI 后端服务配置
+# AI 後端服務配置
 AI_BACKEND_URL = os.getenv('AI_BACKEND_URL', 'http://localhost:8080/api/remove_bg')
 
-# 文件上传配置
+# 檔案上傳配置
 UPLOAD_FOLDER = BASE_DIR / 'output'
 LOG_FOLDER = BASE_DIR / 'logs'
 
-# 确保必要的目录存在
+# 確保必要的目錄存在
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 LOG_FOLDER.mkdir(exist_ok=True)
 
-# 文件上传大小限制（10MB）
+# 檔案上傳大小限制（10MB）
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 
-# 日志配置
+# 日誌配置
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

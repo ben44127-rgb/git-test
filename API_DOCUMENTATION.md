@@ -329,24 +329,39 @@ MINIO_SECURE=False
 
 ---
 
-## 🧪 测试方法
+## 🧪 測試方法
 
-### 1. 使用测试脚本
-
-```bash
-python3 test_api.py
-```
-
-### 2. 使用 curl
+### 使用 curl 測試
 
 ```bash
-# 创建测试图片
+# 創建測試圖片
 python3 -c "from PIL import Image; img = Image.new('RGB', (200,200), 'red'); img.save('test.png')"
 
-# 上传测试
+# 上傳測試
 curl -X POST http://localhost:30000/api/upload-image \
   -F "image_data=@test.png" \
   -F "filename=test.png"
+```
+
+### 使用 Python requests 測試
+
+```python
+import requests
+from PIL import Image
+import io
+
+# 創建測試圖片
+img = Image.new('RGB', (200, 200), color='red')
+img_bytes = io.BytesIO()
+img.save(img_bytes, format='PNG')
+img_bytes.seek(0)
+
+# 發送請求
+files = {'image_data': ('test.png', img_bytes, 'image/png')}
+data = {'filename': 'test.png'}
+response = requests.post('http://localhost:30000/api/upload-image', 
+                        files=files, data=data)
+print(response.json())
 ```
 
 ### 3. 查看日志
@@ -422,9 +437,10 @@ tail -f logs/django_app.log
 
 ---
 
-## 📞 联系方式
+## 📞 相關資源
 
-如有问题，请查看:
-- 日志文件: `logs/django.log`
-- API 测试脚本: `test_api.py`
-- 配置文档: `DJANGO_MIGRATION.md`
+如有問題，請查看：
+- 日誌檔案：`logs/django_app.log`
+- 環境變數配置：`ENV_CONFIG.md`
+- 腳本使用說明：`SCRIPT_INTEGRATION.md`
+- 專案說明：`README.md`

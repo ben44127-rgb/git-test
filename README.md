@@ -1,102 +1,202 @@
-# Flask 圖片處理 API
+# Django 圖片處理 API
 
-這是一個 Flask 應用程式，作為前端與 AI 後端之間的中間層，用於處理圖片去背功能。
+這是一個 Django 應用程式，作為前端與 AI 後端之間的中間層，用於處理圖片去背功能，並將處理後的圖片存儲到 MinIO 對象存儲。
 
 ## 📋 功能描述
 
-- 接收前端上傳的 Base64 格式圖片
-- 解碼並轉換圖片格式
+- 接收前端上傳的圖片檔案
 - 轉發給 AI 後端進行去背處理
-- 回傳處理後的結果給前端
+- 將處理後的圖片存儲到 MinIO
+- 生成預簽名 URL 供前端下載
+- 完整的錯誤處理和日誌記錄
 
 ## 🛠️ 技術棧
 
-- **Python 3.9**
-- **Flask** - Web 框架
-- **Flask-CORS** - 處理跨域請求
+- **Python 3.11**
+- **Django 4.x** - Web 框架
+- **Gunicorn** - WSGI HTTP 服務器（生產環境）
+- **MinIO** - 對象存儲服務
+- **Docker & Docker Compose** - 容器化部署
 - **Requests** - HTTP 客戶端
-- **Docker** - 容器化部署
 
 ## 📁 專案結構
 
 ```
 test_project/
-├── app.py              # Flask 主應用程式
-├── dockerfile          # Docker 映像檔配置
-├── requirements.txt    # Python 依賴套件
-├── run.sh             # 快速部署腳本
-└── README.md          # 專案說明文件
+├── api/                    # API 應用
+│   ├── views.py           # 視圖函數（主要業務邏輯）
+│   ├── urls.py            # URL 路由配置
+│   └── models.py          # 數據模型
+├── config/                 # Django 配置
+│   ├── settings.py        # 應用設定
+│   ├── urls.py            # 主 URL 路由
+│   └── wsgi.py            # WSGI 配置
+├── start.sh               # 統一啟動腳本
+├── stop.sh                # 統一停止腳本
+├── Dockerfile             # Docker 映像配置
+├── docker-compose.yml     # Docker Compose 配置
+├── requirements.txt       # Python 依賴
+├── .env                   # 環境變數配置
+├── .env.example           # 環境變數範本
+├── ENV_CONFIG.md          # 環境變數配置說明
+├── SCRIPT_INTEGRATION.md  # 腳本整合說明
+└── README.md              # 專案說明文件
 ```
 
 ## 🚀 快速開始
 
-### 方法一：使用 Docker（推薦）
+### 前置要求
 
-1. **確保已安裝 Docker**
+- Docker 和 Docker Compose（推薦）
+- 或 Python 3.11+（本地開發）
+
+### 方法一：使用 Docker Compose（推薦）
+
+1. **複製環境變數範本**
    ```bash
-   docker --version
+   cp .env.example .env
    ```
 
-2. **執行部署腳本**
+2. **編輯 .env 檔案，設定 AI 後端位址**
    ```bash
-   chmod +x run.sh
-   ./run.sh
+   nano .env
+   # 修改 AI_BACKEND_URL 為您的 AI 服務位址
    ```
 
-3. **應用將運行在**
+3. **啟動服務**
+   ```bash
+   chmod +x start.sh
+   ./start.sh --docker
    ```
-   http://192.168.233.128:5000
-   ```
+
+4. **服務將運行在**
+   - Django API: http://localhost:30000
+   - MinIO 控制台: http://localhost:9001
+   - MinIO API: http://localhost:9000
 
 ### 方法二：本地開發
 
-1. **安裝依賴**
+1. **複製環境變數範本**
+   ```bash
+   cp .env.example .env
+   nano .env  # 編輯配置
+   ```
+
+2. **啟動 MinIO（使用 Docker）**
+   ```bash
+   docker compose up -d minio
+   ```
+
+3. **安裝 Python 依賴**
    ```bash
    pip install -r requirements.txt
    ```
 
-2. **運行應用**
+4. **啟動應用**
    ```bash
-   python app.py
+   chmod +x start.sh
+   ./start.sh --local
    ```
+
+### 方法三：自動偵測模式
+
+```bash
+./start.sh
+```
+腳本會自動偵測環境並選擇最適合的啟動方式。
 
 ## 📡 API 端點
 
-### POST `/api/upload-image`
+### GET `/health`
 
-接收前端上傳的圖片並轉發給 AI 後端處理。
+健康檢查端點。
 
-**請求格式：**
+**回應：**
 ```json
 {
-  "image_data": "base64編碼的圖片資料",
-  "filename": "photo.png"
+  "status": "healthy",
+  "message": "服務運行正常"
 }
 ```
+
+### POST `/api/upload-image`
+
+接收前端上傳的圖片並處理。
+
+**請求格式（multipart/form-data）：**
+- `image_data`: 圖片檔案
+- `filename`: 檔案名稱
 
 **成功回應：**
 ```json
 {
-  "message": "去背成功",
-  "processed_url": "http://你的IP:5000/download/processed_photo.png",
-  "original_filename": "photo.png"
+  "success": true,
+  "message": "圖片處理和儲存成功",
+  "ai_status": {
+    "status_code": 200,
+    "message": "去背成功"
+  },
+  "storage_status": {
+    "success": true,
+    "filename": "processed_xxx.png",
+    "url": "http://localhost:9000/processed-images/...",
+    "storage": "minio"
+  }
 }
 ```
 
 **錯誤回應：**
 ```json
 {
-  "error": "錯誤訊息"
+  "success": false,
+  "message": "錯誤訊息",
+  "ai_status": {
+    "status_code": 422,
+    "message": "圖片過於模糊"
+  }
 }
 ```
 
-## ⚙️ 配置說明
+詳細 API 文件請參考：[API_DOCUMENTATION.md](API_DOCUMENTATION.md)
 
-在 `app.py` 中修改 AI 後端地址：
+## ⚙️ 環境變數配置
 
-```python
-AI_BACKEND_URL = "http://192.168.233.128:8001/api/remove_bg"
+主要環境變數（在 `.env` 中配置）：
+
+```bash
+# Django 配置
+DEBUG=False
+DJANGO_SECRET_KEY=your-secret-key
+
+# MinIO 配置
+MINIO_ENDPOINT=localhost:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET_NAME=processed-images
+
+# AI 後端配置
+AI_BACKEND_URL=http://your-ai-service:8001/api/remove_bg
 ```
+
+詳細配置說明請參考：[ENV_CONFIG.md](ENV_CONFIG.md)
+
+## 🎯 啟動腳本說明
+
+### start.sh - 統一啟動腳本
+
+支援三種模式：
+- **自動偵測**：`./start.sh`
+- **Docker Compose**：`./start.sh --docker`
+- **本地開發**：`./start.sh --local`
+
+### stop.sh - 統一停止腳本
+
+支援停止不同模式的服務：
+- **停止所有**：`./stop.sh`
+- **只停止 Docker**：`./stop.sh --docker`
+- **只停止本地**：`./stop.sh --local`
+
+詳細說明請參考：[SCRIPT_INTEGRATION.md](SCRIPT_INTEGRATION.md)
 
 根據你的 Docker 網路配置或 AI 服務地址進行調整。
 

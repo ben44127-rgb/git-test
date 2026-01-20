@@ -1,5 +1,5 @@
 from django.db import models
 
 # Create your models here.
-# 在这里创建数据库模型
-# 本应用不需要数据库，所以这个文件保持空白
+# 在這裡建立資料庫模型
+# 本應用不需要資料庫，所以這個檔案保持空白
