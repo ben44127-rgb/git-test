@@ -45,7 +45,7 @@ Thumbs.db
 
 # 專案特定
 /output/
-/logs/*.log
+/logs/
 
 # Docker
 docker-compose.override.yml
