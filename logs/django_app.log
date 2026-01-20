@@ -1,0 +1,32 @@
+INFO 2026-01-20 22:05:07,565 views ✅ Bucket 已存在：processed-images
+INFO 2026-01-20 22:05:31,334 autoreload Watching for file changes with StatReloader
+INFO 2026-01-20 22:05:31,400 views ✅ Bucket 已存在：processed-images
+INFO 2026-01-20 22:05:48,963 autoreload Watching for file changes with StatReloader
+INFO 2026-01-20 22:05:49,023 views ✅ Bucket 已存在：processed-images
+WARNING 2026-01-20 22:05:52,947 log Not Found: /
+INFO 2026-01-20 22:06:26,196 autoreload Watching for file changes with StatReloader
+INFO 2026-01-20 22:06:26,260 views ✅ Bucket 已存在：processed-images
+INFO 2026-01-20 22:07:20,449 autoreload Watching for file changes with StatReloader
+INFO 2026-01-20 22:07:20,514 views ✅ Bucket 已存在：processed-images
+WARNING 2026-01-20 22:07:43,493 log Not Found: /
+WARNING 2026-01-20 22:07:53,426 log Not Found: /
+INFO 2026-01-20 22:08:28,425 views ==================================================
+INFO 2026-01-20 22:08:28,425 views 📥 收到新的图片处理请求
+INFO 2026-01-20 22:08:28,428 views 📷 接收到图片：test.png
+INFO 2026-01-20 22:08:28,428 views    文件大小：287 bytes
+INFO 2026-01-20 22:08:28,428 views    内容类型：image/png
+INFO 2026-01-20 22:08:28,428 views ✅ 图片读取成功，大小：287 bytes
+INFO 2026-01-20 22:08:28,428 views 🤖 开始调用 AI 后端：http://localhost:8080/api/remove_bg
+INFO 2026-01-20 22:08:28,436 views ✅ AI 后端响应状态码：400
+INFO 2026-01-20 22:08:28,436 views    响应头 Content-Type：application/json
+ERROR 2026-01-20 22:08:28,436 views ❌ AI 后端返回错误，状态码：400
+ERROR 2026-01-20 22:08:28,436 views    错误详情：{"error":"\u7f3a\u5c11\u6587\u4ef6"}
+
+ERROR 2026-01-20 22:08:28,436 log Internal Server Error: /api/upload-image
+INFO 2026-01-20 23:05:59,647 autoreload Watching for file changes with StatReloader
+INFO 2026-01-20 23:05:59,721 views ✅ Bucket 已存在：processed-images
+WARNING 2026-01-20 23:06:05,073 log Not Found: /
+INFO 2026-01-20 23:12:13,894 views ✅ Bucket 已存在：processed-images
+INFO 2026-01-20 23:12:25,477 autoreload Watching for file changes with StatReloader
+INFO 2026-01-20 23:12:25,540 views ✅ Bucket 已存在：processed-images
+WARNING 2026-01-20 23:12:27,325 log Not Found: /
