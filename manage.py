@@ -2,6 +2,19 @@
 """Django's command-line utility for administrative tasks."""
 import os
 import sys
+from pathlib import Path
+
+# 提前載入環境變數，確保所有 Django 命令都能使用 .env 中的配置
+try:
+    from dotenv import load_dotenv
+    # 找到專案根目錄的 .env 檔案
+    base_dir = Path(__file__).resolve().parent
+    env_path = base_dir / '.env'
+    if env_path.exists():
+        load_dotenv(env_path)
+except ImportError:
+    # 如果沒有安裝 python-dotenv，略過
+    pass
 
 
 def main():

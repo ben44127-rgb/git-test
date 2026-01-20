@@ -27,8 +27,8 @@ RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir gunicorn
 
 # 複製啟動腳本
-COPY docker-start.sh /app/docker-start.sh
-RUN chmod +x /app/docker-start.sh
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
 
 # 複製應用程式代碼
 COPY manage.py .
@@ -52,5 +52,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:30000/health || exit 1
 
 # 使用啟動腳本
-# 此腳本會處理數據庫遷移、等待依賴服務、啟動 Gunicorn
-CMD ["/app/docker-start.sh"]
+# 此腳本會自動偵測環境、處理數據庫遷移、等待依賴服務、啟動 Gunicorn
+CMD ["/app/start.sh"]
