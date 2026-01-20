@@ -1,7 +1,7 @@
 # ==========================================
-# Docker Compose 配置文件
+# Docker Compose 配置檔案
 # ==========================================
-# 這個文件定義了多個服務的配置，使用 docker-compose 可以一次啟動所有服務
+# 這個檔案定義了多個服務的配置，使用 docker-compose 可以一次啟動所有服務
 
 version: '3.8'
 
@@ -14,8 +14,9 @@ services:
       - "9000:9000" # MinIO API 端口
       - "9001:9001" # MinIO 管理控制台端口
     environment:
-      MINIO_ROOT_USER: minioadmin # 管理員帳號
-      MINIO_ROOT_PASSWORD: minioadmin # 管理員密碼
+      # 從 .env 檔案讀取，如果沒有則使用預設值
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data # 持久化數據
@@ -33,42 +34,29 @@ services:
     container_name: django-backend
     ports:
       - "30000:30000" # API 端口
+    env_file:
+      - .env # 載入 .env 檔案中的所有環境變數
     environment:
       # MinIO 配置（Docker 內部使用服務名稱）
+      # 這裡會覆蓋 .env 中的 MINIO_ENDPOINT，因為在 Docker 網路中需要使用服務名稱
       MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET_NAME: processed-images
-      MINIO_SECURE: "false"
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-processed-images}
+      MINIO_SECURE: "False"
 
       # AI 後端配置
       # 如果 AI 服務也在 Docker 中，使用服務名稱
-      # 如果在宿主機上，使用 host.docker.internal
-      AI_BACKEND_URL: http://host.docker.internal:8080/api/remove_bg
+      # 如果在宿主機上，使用 host.docker.internal (Mac/Windows) 或 172.17.0.1 (Linux)
+      AI_BACKEND_URL: ${AI_BACKEND_URL:-http://host.docker.internal:8080/api/remove_bg}
 
       # Django 配置
-      DEBUG: "False"
-      DJANGO_SECRET_KEY: "change-this-secret-key-in-production"
+      DEBUG: ${DEBUG:-False}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-this-secret-key-in-production}
     depends_on:
       - minio
     networks:
       - app-network
-    restart: unless-stopped
-
-  # ========== 模擬 AI 服務（測試用） ==========
-  # 這個服務僅用於測試，生產環境不需要
-  # 要啟動這個服務，使用：docker-compose --profile testing up
-  mock-ai:
-    build:
-      context: .
-      dockerfile: Dockerfile.mock-ai
-    container_name: mock-ai-server
-    ports:
-      - "8080:8080"
-    networks:
-      - app-network
-    profiles:
-      - testing # 只在 testing profile 中啟動
     restart: unless-stopped
 
 # ========== 網絡配置 ==========
