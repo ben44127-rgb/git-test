@@ -42,9 +42,13 @@ class User(AbstractBaseUser):
     user_name = models.CharField(max_length=150, unique=True, db_column='user_name')
     user_email = models.EmailField(unique=True, db_column='user_email')
     user_password = models.CharField(max_length=255, db_column='user_password')
-    user_weight = models.IntegerField(null=True, blank=True, db_column='user_weight')
-    user_height = models.IntegerField(null=True, blank=True, db_column='user_height')
-    user_image_url = models.CharField(max_length=500, null=True, blank=True, db_column='user_image_url')
+    user_weight = models.IntegerField(default=0, db_column='user_weight')
+    user_height = models.IntegerField(default=0, db_column='user_height')
+    user_arm_length = models.IntegerField(default=0, db_column='user_arm_length', help_text='手臂長度(cm)')
+    user_shoulder_width = models.IntegerField(default=0, db_column='user_shoulder_width', help_text='肩寬(cm)')
+    user_waistline = models.IntegerField(default=0, db_column='user_waistline', help_text='腰圍(cm)')
+    user_leg_length = models.IntegerField(default=0, db_column='user_leg_length', help_text='腿長(cm)')
+    user_image_url = models.CharField(max_length=500, default='', db_column='user_image_url')
     user_created_time = models.DateTimeField(auto_now_add=True, db_column='user_created_time')
     user_updated_time = models.DateTimeField(auto_now=True, db_column='user_updated_time')
     
@@ -104,7 +108,10 @@ class Clothes(models.Model):
     f_user_uid = models.CharField(max_length=255, db_column='f_user_uid')
     clothes_uid = models.CharField(max_length=255, unique=True, db_column='clothes_uid', default=uuid.uuid4)
     clothes_category = models.CharField(max_length=100, db_column='clothes_category')
-    clothes_size = models.CharField(max_length=10, db_column='clothes_size')
+    clothes_arm_length = models.IntegerField(default=0, db_column='clothes_arm_length', help_text='袖長(cm)')
+    clothes_shoulder_width = models.IntegerField(default=0, db_column='clothes_shoulder_width', help_text='肩寬(cm)')
+    clothes_waistline = models.IntegerField(default=0, db_column='clothes_waistline', help_text='腰圍(cm)')
+    clothes_leg_length = models.IntegerField(default=0, db_column='clothes_leg_length', help_text='褲長(cm)')
     clothes_image_url = models.CharField(max_length=500, db_column='clothes_image_url')
     clothes_favorite = models.BooleanField(default=False, db_column='clothes_favorite')
     clothes_created_time = models.DateTimeField(auto_now_add=True, db_column='clothes_created_time')
@@ -123,35 +130,37 @@ class Style(models.Model):
     """
     風格表模型
     對應圖片中的 style 表結構
+    一件衣服可對應多個風格（多筆 style 連接同一個 clothes_uid）
     """
     style_id = models.AutoField(primary_key=True, db_column='style_id')
     f_clothes_uid = models.CharField(max_length=255, db_column='f_clothes_uid')
     style_uid = models.CharField(max_length=255, unique=True, db_column='style_uid', default=uuid.uuid4)
     style_name = models.CharField(max_length=100, db_column='style_name')
-    
+
     class Meta:
         db_table = 'style'
         verbose_name = '風格'
         verbose_name_plural = '風格'
-    
+
     def __str__(self):
-        return self.style_name
+        return f"{self.style_name} - {self.style_uid}"
 
 
 class Color(models.Model):
     """
     顏色表模型
     對應圖片中的 color 表結構
+    一件衣服可對應多個顏色
     """
     color_id = models.AutoField(primary_key=True, db_column='color_id')
     f_clothes_uid = models.CharField(max_length=255, db_column='f_clothes_uid')
     color_uid = models.CharField(max_length=255, unique=True, db_column='color_uid', default=uuid.uuid4)
     color_name = models.CharField(max_length=100, db_column='color_name')
-    
+
     class Meta:
         db_table = 'color'
         verbose_name = '顏色'
         verbose_name_plural = '顏色'
-    
+
     def __str__(self):
-        return self.color_name
+        return f"{self.color_name} - {self.color_uid}"
