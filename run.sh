@@ -40,7 +40,7 @@ docker run -d \
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ 容器啟動成功${NC}"
-    echo -e "${GREEN}應用運行於: http://localhost:$PORT${NC}"
+    echo -e "${GREEN}應用運行於: http://192.168.233.128:$PORT${NC}"
     echo -e "${BLUE}查看日誌: docker logs -f $CONTAINER_NAME${NC}"
 else
     echo -e "${RED}✗ 容器啟動失敗${NC}"
