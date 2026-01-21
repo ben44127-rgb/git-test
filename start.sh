@@ -249,7 +249,8 @@ start_docker() {
     echo "=========================================="
     echo ""
     echo "   📡 服務地址："
-    echo "   Django API:    http://localhost:30000"
+    echo "   Django 後端:   http://localhost:30000"
+    echo "   圖片上傳:     http://localhost:30000/picture/clothes/upload_image"
     echo "   MinIO API:     http://localhost:9000"
     echo "   MinIO 控制台:  http://localhost:9001"
     echo "   PostgreSQL:    localhost:9090"
@@ -391,7 +392,8 @@ start_local() {
         echo "✅ 應用已啟動！"
         echo "   進程 ID: $APP_PID"
         echo "   日誌檔案: logs/app.log"
-        echo "   API 地址: http://localhost:30000"
+        echo "   服務地址: http://localhost:30000"
+        echo "   圖片上傳: http://localhost:30000/picture/clothes/upload_image"
 
         # 執行健康檢查
         echo ""

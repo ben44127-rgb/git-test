@@ -46,7 +46,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',      # JWT 認證
     'rest_framework_simplejwt.token_blacklist',  # JWT Token 黑名單（登出用）
     'corsheaders',                   # 跨域資源共享(CORS)支援
-    'api',                           # 我們的 API 應用
+    'picture',                       # 圖片處理應用
     'accounts',                      # 用戶認證應用
 ]
 
@@ -214,7 +214,7 @@ MINIO_SECURE = os.getenv('MINIO_SECURE', 'False') == 'True'
 MINIO_EXTERNAL_URL = os.getenv('MINIO_EXTERNAL_URL', 'http://192.168.233.128:9000')
 
 # AI 後端服務配置
-AI_BACKEND_URL = os.getenv('AI_BACKEND_URL', 'http://192.168.233.128:8002/api/remove_bg')
+AI_BACKEND_URL = os.getenv('AI_BACKEND_URL', 'http://192.168.233.128:8002/virtual_try_on/clothes/remove_bg')
 
 # 檔案上傳配置
 UPLOAD_FOLDER = BASE_DIR / 'output'
