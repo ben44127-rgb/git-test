@@ -1,46 +1,70 @@
-# Django 圖片處理 API
+# Django 圖片處理與用戶認證系統
 
-這是一個 Django 應用程式，作為前端與 AI 後端之間的中間層，用於處理圖片去背功能，並將處理後的圖片存儲到 MinIO 對象存儲。
+這是一個整合的 Django 應用程式，提供圖片處理和用戶認證功能：
+1. 圖片去背處理 API（前端與 AI 後端之間的中間層）
+2. 完整的用戶認證系統（註冊、登入、登出、刪除用戶）
 
 ## 📋 功能描述
 
+### 圖片處理功能
 - 接收前端上傳的圖片檔案
 - 轉發給 AI 後端進行去背處理
 - 將處理後的圖片存儲到 MinIO
 - 生成預簽名 URL 供前端下載
 - 完整的錯誤處理和日誌記錄
 
+### 用戶認證功能 🆕
+- 用戶註冊（使用 Django 內建認證系統）
+- 用戶登入/登出
+- 刪除用戶帳號
+- 檢查登入狀態
+- 用戶數據存儲在 PostgreSQL 數據庫
+
 ## 🛠️ 技術棧
 
 - **Python 3.11**
-- **Django 4.x** - Web 框架
+- **Django 5.1.5** - Web 框架
+- **Django REST Framework 3.14.0** - REST API 框架
+- **PostgreSQL 15** - 關係型數據庫（用戶認證）
 - **Gunicorn** - WSGI HTTP 服務器（生產環境）
-- **MinIO** - 對象存儲服務
+- **MinIO** - 對象存儲服務（圖片存儲）
 - **Docker & Docker Compose** - 容器化部署
-- **Requests** - HTTP 客戶端
+- **psycopg2-binary** - PostgreSQL 適配器
+
+## 🌐 服務端口
+
+- **Django 後端**: `http://localhost:30000`
+- **圖片處理 API**: `http://localhost:30000/api/`
+- **用戶認證 API**: `http://localhost:30000/api/auth/`
+- **PostgreSQL**: `localhost:9090`
+- **MinIO API**: `localhost:9000`
+- **MinIO 管理控制台**: `http://localhost:9001`
 
 ## 📁 專案結構
 
 ```
 test_project/
-├── api/                    # API 應用
-│   ├── views.py           # 視圖函數（主要業務邏輯）
-│   ├── urls.py            # URL 路由配置
-│   └── models.py          # 數據模型
-├── config/                 # Django 配置
-│   ├── settings.py        # 應用設定
-│   ├── urls.py            # 主 URL 路由
-│   └── wsgi.py            # WSGI 配置
-├── start.sh               # 統一啟動腳本
-├── stop.sh                # 統一停止腳本
-├── Dockerfile             # Docker 映像配置
-├── docker-compose.yml     # Docker Compose 配置
-├── requirements.txt       # Python 依賴
-├── .env                   # 環境變數配置
-├── .env.example           # 環境變數範本
-├── ENV_CONFIG.md          # 環境變數配置說明
-├── SCRIPT_INTEGRATION.md  # 腳本整合說明
-└── README.md              # 專案說明文件
+├── accounts/              # 🆕 用戶認證應用
+│   ├── views.py          # 認證 API 視圖
+│   ├── urls.py           # 認證路由
+│   └── models.py         # 用戶模型
+├── api/                   # 圖片處理應用
+│   ├── views.py          # 視圖函數（主要業務邏輯）
+│   ├── urls.py           # URL 路由配置
+│   └── models.py         # 數據模型
+├── config/                # Django 配置
+│   ├── settings.py       # 應用設定（已整合認證）
+│   ├── urls.py           # 主 URL 路由（已整合認證路由）
+│   └── wsgi.py           # WSGI 配置
+├── start.sh              # 統一啟動腳本
+├── stop.sh               # 統一停止腳本
+├── Dockerfile            # Docker 映像配置
+├── docker-compose.yml    # 🆕 Docker Compose 配置（含 PostgreSQL）
+├── requirements.txt      # 🆕 Python 依賴（含認證相關）
+├── .env                  # 🆕 環境變數配置（含數據庫配置）
+├── .env.example          # 環境變數範本
+├── AUTH_SYSTEM.md        # 🆕 用戶認證系統完整說明
+└── README.md             # 專案說明文件
 ```
 
 ## 🚀 快速開始
@@ -223,8 +247,9 @@ docker rm flask-container
 
 1. **網路配置**：確保前端、此中間層、AI 後端三者之間網路互通
 2. **CORS 設定**：已啟用 CORS，允許跨域請求
-3. **端口配置**：預設使用 5000 端口，可在 `run.sh` 中修改
+3. **端口配置**：Django 使用 30000 端口，PostgreSQL 使用 9090 端口
 4. **AI 後端**：需要先啟動 AI 去背服務
+5. **數據庫**：首次啟動會自動創建用戶表
 
 ## 🔧 常見問題
 
@@ -232,10 +257,23 @@ docker rm flask-container
 A: 檢查 `AI_BACKEND_URL` 是否正確，確認 AI 服務已啟動且網路可達。
 
 **Q: Docker 容器啟動失敗？**  
-A: 檢查 5000 端口是否被佔用，使用 `docker logs flask-container` 查看錯誤日誌。
+A: 檢查端口是否被佔用，使用 `docker-compose logs` 查看錯誤日誌。
 
 **Q: 圖片處理失敗？**  
-A: 確認上傳的 Base64 格式正確，檢查 AI 後端是否正常運作。
+A: 確認上傳的格式正確，檢查 AI 後端是否正常運作。
+
+**Q: 認證 API 無法使用？**  
+A: 確認 PostgreSQL 數據庫已啟動，檢查數據庫連接配置。查看 [AUTH_SYSTEM.md](AUTH_SYSTEM.md) 獲取詳細說明。
+
+**Q: 數據庫連接失敗？**  
+A: 檢查 `.env` 文件中的數據庫配置，確認 PostgreSQL 容器已正確啟動。
+
+## 📚 相關文檔
+
+- [AUTH_SYSTEM.md](AUTH_SYSTEM.md) - 用戶認證系統完整說明
+- [ENV_CONFIG.md](ENV_CONFIG.md) - 環境變數配置說明
+- [SCRIPT_INTEGRATION.md](SCRIPT_INTEGRATION.md) - 腳本整合說明
+- [API_DOCUMENTATION.md](API_DOCUMENTATION.md) - API 文檔
 
 ## 📄 授權
 
