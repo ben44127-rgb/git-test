@@ -3,9 +3,28 @@
 # ==========================================
 # 這個檔案定義了多個服務的配置，使用 docker-compose 可以一次啟動所有服務
 
-version: '3.8'
-
 services:
+  # ========== PostgreSQL 數據庫服務 ==========
+  db:
+    image: postgres:15
+    container_name: auth_postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-auth_db}
+      POSTGRES_USER: ${DB_USER:-auth_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-auth_password_123}
+    ports:
+      - "9090:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U auth_user -d auth_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   # ========== MinIO 對象存儲服務 ==========
   minio:
     image: minio/minio:latest
@@ -54,6 +73,13 @@ services:
       DEBUG: ${DEBUG:-False}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-this-secret-key-in-production}
 
+      # PostgreSQL 數據庫配置
+      DB_NAME: ${DB_NAME:-auth_db}
+      DB_USER: ${DB_USER:-auth_user}
+      DB_PASSWORD: ${DB_PASSWORD:-auth_password_123}
+      DB_HOST: db
+      DB_PORT: 5432
+
       # 開發模式配置（啟用 hot reload）
       # 設為 true 時使用 Django runserver 並掛載程式碼目錄
       # 設為 false 時使用 Gunicorn 生產伺服器
@@ -61,6 +87,7 @@ services:
     volumes:
       # 掛載程式碼目錄以支援 hot reload（開發模式）
       - ./api:/app/api
+      - ./accounts:/app/accounts
       - ./config:/app/config
       - ./manage.py:/app/manage.py
       # 日誌目錄
@@ -72,16 +99,16 @@ services:
       sh -c "
         if [ \"$$DJANGO_DEV_MODE\" = \"true\" ]; then
           echo '🔧 開發模式：Hot Reload 已啟用';
-          echo '⏳ 等待 MinIO 服務...';
-          sleep 5;
+          echo '⏳ 等待 MinIO 和數據庫服務...';
+          sleep 10;
           echo '🔄 運行數據庫遷移...';
           python3 manage.py migrate --noinput;
           echo '🚀 啟動 Django 開發伺服器...';
           python3 manage.py runserver 0.0.0.0:30000;
         else
           echo '🚀 生產模式：使用 Gunicorn';
-          echo '⏳ 等待 MinIO 服務...';
-          sleep 5;
+          echo '⏳ 等待 MinIO 和數據庫服務...';
+          sleep 10;
           echo '🔄 運行數據庫遷移...';
           python3 manage.py migrate --noinput;
           echo '✅ 啟動 Gunicorn 伺服器...';
@@ -89,7 +116,10 @@ services:
         fi
       "
     depends_on:
-      - minio
+      minio:
+        condition: service_started
+      db:
+        condition: service_healthy
     networks:
       - app-network
     restart: unless-stopped
@@ -102,4 +132,6 @@ networks:
 # ========== 數據卷配置 ==========
 volumes:
   minio_data:
+    driver: local
+  postgres_data:
     driver: local

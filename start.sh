@@ -20,6 +20,7 @@ set -e  # 遇到錯誤立即退出
 # 解析命令列參數
 # ==========================================
 FORCE_MODE=""
+RUN_TEST=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         --docker)
@@ -30,12 +31,17 @@ while [[ $# -gt 0 ]]; do
             FORCE_MODE="local"
             shift
             ;;
+        --test)
+            RUN_TEST=true
+            shift
+            ;;
         --help|-h)
             echo "使用方式: $0 [選項]"
             echo ""
             echo "選項："
             echo "  --docker    強制使用 Docker Compose 模式"
             echo "  --local     強制使用本地開發模式"
+            echo "  --test      啟動後自動運行認證系統測試"
             echo "  --help      顯示此幫助訊息"
             echo ""
             echo "不指定選項時，會自動偵測環境："
@@ -298,9 +304,118 @@ echo "   查看日誌:     tail -f logs/app.log"
 echo "   停止服務:     ./stop.sh"
 echo "   健康檢查:     curl http://localhost:30000/health"
 echo "   重啟服務:     ./stop.sh && ./start.sh"
+echo "   測試認證:     ./start.sh --test"
 echo ""
 echo "💡 提示："
 echo "   這是開發伺服器，不適合生產環境"
 echo "   生產環境請使用 Docker: ./docker-start.sh"
 echo ""
 echo "=========================================="
+
+# ==========================================
+# 認證系統測試（如果指定 --test 選項）
+# ==========================================
+if [ "$RUN_TEST" = true ]; then
+    echo ""
+    echo "=========================================="
+    echo "   開始測試用戶認證系統"
+    echo "=========================================="
+    echo ""
+    
+    # 等待服務完全啟動
+    echo "⏳ 等待服務完全啟動..."
+    sleep 3
+    
+    BASE_URL="http://localhost:30000/api/auth"
+    
+    # 顏色定義
+    GREEN='\033[0;32m'
+    RED='\033[0;31m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m' # No Color
+    
+    # 測試註冊
+    echo -e "${BLUE}📝 測試用戶註冊...${NC}"
+    REGISTER_RESPONSE=$(curl -s -X POST ${BASE_URL}/register/ \
+      -H "Content-Type: application/json" \
+      -c /tmp/auth_cookies.txt \
+      -d '{"username":"testuser","password":"test123","email":"test@test.com"}')
+    
+    if echo $REGISTER_RESPONSE | grep -q "success.*true"; then
+      echo -e "${GREEN}✅ 註冊成功${NC}"
+      echo "響應: $REGISTER_RESPONSE"
+    else
+      echo -e "${YELLOW}⚠️  註冊可能失敗（用戶可能已存在）${NC}"
+      echo "響應: $REGISTER_RESPONSE"
+    fi
+    echo ""
+    
+    # 測試登入
+    echo -e "${BLUE}🔐 測試用戶登入...${NC}"
+    LOGIN_RESPONSE=$(curl -s -X POST ${BASE_URL}/login/ \
+      -H "Content-Type: application/json" \
+      -c /tmp/auth_cookies.txt \
+      -d '{"username":"testuser","password":"test123"}')
+    
+    if echo $LOGIN_RESPONSE | grep -q "success.*true"; then
+      echo -e "${GREEN}✅ 登入成功${NC}"
+      echo "響應: $LOGIN_RESPONSE"
+    else
+      echo -e "${RED}❌ 登入失敗${NC}"
+      echo "響應: $LOGIN_RESPONSE"
+    fi
+    echo ""
+    
+    # 測試檢查登入狀態
+    echo -e "${BLUE}🔎 測試檢查登入狀態...${NC}"
+    CHECK_RESPONSE=$(curl -s -X GET ${BASE_URL}/check/ \
+      -b /tmp/auth_cookies.txt)
+    
+    if echo $CHECK_RESPONSE | grep -q "authenticated.*true"; then
+      echo -e "${GREEN}✅ 登入狀態正常${NC}"
+      echo "響應: $CHECK_RESPONSE"
+    else
+      echo -e "${RED}❌ 未登入${NC}"
+      echo "響應: $CHECK_RESPONSE"
+    fi
+    echo ""
+    
+    # 測試登出
+    echo -e "${BLUE}🚪 測試用戶登出...${NC}"
+    LOGOUT_RESPONSE=$(curl -s -X POST ${BASE_URL}/logout/ \
+      -b /tmp/auth_cookies.txt)
+    
+    if echo $LOGOUT_RESPONSE | grep -q "success.*true"; then
+      echo -e "${GREEN}✅ 登出成功${NC}"
+      echo "響應: $LOGOUT_RESPONSE"
+    else
+      echo -e "${RED}❌ 登出失敗${NC}"
+      echo "響應: $LOGOUT_RESPONSE"
+    fi
+    echo ""
+    
+    # 再次檢查登入狀態（應該是未登入）
+    echo -e "${BLUE}🔎 再次檢查登入狀態（應該是未登入）...${NC}"
+    CHECK_RESPONSE2=$(curl -s -X GET ${BASE_URL}/check/ \
+      -b /tmp/auth_cookies.txt)
+    
+    if echo $CHECK_RESPONSE2 | grep -q "authenticated.*false"; then
+      echo -e "${GREEN}✅ 登出狀態正常${NC}"
+      echo "響應: $CHECK_RESPONSE2"
+    else
+      echo -e "${YELLOW}⚠️  狀態檢查異常${NC}"
+      echo "響應: $CHECK_RESPONSE2"
+    fi
+    echo ""
+    
+    echo "=========================================="
+    echo "   認證系統測試完成！"
+    echo "=========================================="
+    echo ""
+    echo "💡 提示："
+    echo "- 查看 Docker 容器狀態: docker-compose ps"
+    echo "- 查看後端日誌: docker-compose logs backend"
+    echo "- 查看數據庫: docker exec -it auth_postgres psql -U auth_user -d auth_db"
+    echo ""
+fi

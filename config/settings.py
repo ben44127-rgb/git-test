@@ -42,8 +42,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',       # 會話框架
     'django.contrib.messages',       # 訊息框架
     'django.contrib.staticfiles',    # 靜態檔案管理
+    'rest_framework',                # Django REST Framework
     'corsheaders',                   # 跨域資源共享(CORS)支援
     'api',                           # 我們的 API 應用
+    'accounts',                      # 用戶認證應用
 ]
 
 # 中間件配置
@@ -83,11 +85,15 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
-# 資料庫配置（這個應用不需要資料庫，使用 SQLite 作為占位）
+# 資料庫配置 - 使用 PostgreSQL 存儲用戶數據
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('DB_NAME', 'auth_db'),
+        'USER': os.getenv('DB_USER', 'auth_user'),
+        'PASSWORD': os.getenv('DB_PASSWORD', 'auth_password_123'),
+        'HOST': os.getenv('DB_HOST', 'localhost'),
+        'PORT': os.getenv('DB_PORT', '9090'),
     }
 }
 
@@ -164,6 +170,23 @@ CORS_ALLOW_HEADERS = [
 ]
 
 # ============================================
+# REST Framework 配置
+# ============================================
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ],
+}
+
+# Session 配置
+SESSION_COOKIE_AGE = 86400  # 24 hours
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+
+# ============================================
 # 自定義配置：MinIO 和 AI 後端
 # ============================================
 # MinIO 物件儲存配置
@@ -216,3 +239,11 @@ LOGGING = {
         'level': 'INFO',
     },
 }
+
+# 自定義用戶模型
+AUTH_USER_MODEL = 'accounts.User'
+
+# Django 認證後端
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+]
