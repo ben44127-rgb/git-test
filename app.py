@@ -7,6 +7,11 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
+# 健康檢查端點
+@app.route('/', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'Backend is running', 'port': 5000})
+
 # --- 設定 AI 後端的地址 ---
 # 注意：如果是 Docker 之間互連，這裡要用 service name 或內網 IP
 # 例如：http://ai-service:5000/api/remove_bg
@@ -105,4 +110,4 @@ def process_image():
         return jsonify({'error': f'轉發過程發生錯誤: {str(e)}'}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5001, debug=False)
