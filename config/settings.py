@@ -43,6 +43,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',       # 訊息框架
     'django.contrib.staticfiles',    # 靜態檔案管理
     'rest_framework',                # Django REST Framework
+    'rest_framework_simplejwt',      # JWT 認證
+    'rest_framework_simplejwt.token_blacklist',  # JWT Token 黑名單（登出用）
     'corsheaders',                   # 跨域資源共享(CORS)支援
     'api',                           # 我們的 API 應用
     'accounts',                      # 用戶認證應用
@@ -174,17 +176,28 @@ CORS_ALLOW_HEADERS = [
 # ============================================
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
     ],
 }
 
-# Session 配置
-SESSION_COOKIE_AGE = 86400  # 24 hours
-SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = 'Lax'
+# ============================================
+# Simple JWT 配置
+# ============================================
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),      # Access Token 有效期 1 小時
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),       # Refresh Token 有效期 7 天
+    'ROTATE_REFRESH_TOKENS': True,                     # 刷新時輪換 Refresh Token
+    'BLACKLIST_AFTER_ROTATION': True,                  # 輪換後將舊 Token 加入黑名單
+    'AUTH_HEADER_TYPES': ('Bearer',),                  # Authorization header 格式
+    'USER_ID_FIELD': 'user_id',                        # 自定義 User ID 欄位
+    'USER_ID_CLAIM': 'user_id',                        # JWT payload 中的 user_id claim
+    'USERNAME_FIELD': 'user_name',                     # 自定義 username 欄位
+}
 
 # ============================================
 # 自定義配置：MinIO 和 AI 後端

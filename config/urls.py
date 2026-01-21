@@ -8,7 +8,7 @@ from django.contrib import admin
 from django.urls import path, include
 
 urlpatterns = [
-    path('admin/', admin.site.urls),      # Django 管理後台
-    path('', include('api.urls')),        # API 應用的 URL
-    path('api/auth/', include('accounts.urls')),  # 認證系統的 URL
+    path('admin/', admin.site.urls),                        # Django 管理後台
+    path('', include('api.urls')),                          # API 應用的 URL
+    path('account/user/', include('accounts.urls')),        # 認證系統的 URL
 ]

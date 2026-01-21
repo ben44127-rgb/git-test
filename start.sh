@@ -326,7 +326,7 @@ if [ "$RUN_TEST" = true ]; then
     echo "⏳ 等待服務完全啟動..."
     sleep 3
     
-    BASE_URL="http://localhost:30000/api/auth"
+    BASE_URL="http://localhost:30000/account/user"
     
     # 顏色定義
     GREEN='\033[0;32m'
@@ -337,75 +337,83 @@ if [ "$RUN_TEST" = true ]; then
     
     # 測試註冊
     echo -e "${BLUE}📝 測試用戶註冊...${NC}"
-    REGISTER_RESPONSE=$(curl -s -X POST ${BASE_URL}/register/ \
+    REGISTER_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST ${BASE_URL}/register \
       -H "Content-Type: application/json" \
-      -c /tmp/auth_cookies.txt \
-      -d '{"username":"testuser","password":"test123","email":"test@test.com"}')
+      -d '{"username":"testuser","password":"testPass123!","email":"test@test.com"}')
     
-    if echo $REGISTER_RESPONSE | grep -q "success.*true"; then
-      echo -e "${GREEN}✅ 註冊成功${NC}"
-      echo "響應: $REGISTER_RESPONSE"
+    REGISTER_BODY=$(echo "$REGISTER_RESPONSE" | head -n -1)
+    REGISTER_CODE=$(echo "$REGISTER_RESPONSE" | tail -n 1)
+    
+    if [ "$REGISTER_CODE" = "201" ]; then
+      echo -e "${GREEN}✅ 註冊成功 (201 Created)${NC}"
+      echo "響應: $REGISTER_BODY"
+    elif [ "$REGISTER_CODE" = "409" ]; then
+      echo -e "${YELLOW}⚠️  用戶已存在 (409 Conflict)${NC}"
+      echo "響應: $REGISTER_BODY"
     else
-      echo -e "${YELLOW}⚠️  註冊可能失敗（用戶可能已存在）${NC}"
-      echo "響應: $REGISTER_RESPONSE"
+      echo -e "${RED}❌ 註冊失敗 ($REGISTER_CODE)${NC}"
+      echo "響應: $REGISTER_BODY"
     fi
     echo ""
     
-    # 測試登入
+    # 測試登入（取得 JWT Token）
     echo -e "${BLUE}🔐 測試用戶登入...${NC}"
-    LOGIN_RESPONSE=$(curl -s -X POST ${BASE_URL}/login/ \
+    LOGIN_RESPONSE=$(curl -s -X POST ${BASE_URL}/login \
       -H "Content-Type: application/json" \
-      -c /tmp/auth_cookies.txt \
-      -d '{"username":"testuser","password":"test123"}')
+      -d '{"username":"testuser","password":"testPass123!"}')
     
-    if echo $LOGIN_RESPONSE | grep -q "success.*true"; then
-      echo -e "${GREEN}✅ 登入成功${NC}"
-      echo "響應: $LOGIN_RESPONSE"
+    ACCESS_TOKEN=$(echo $LOGIN_RESPONSE | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('access',''))" 2>/dev/null)
+    REFRESH_TOKEN=$(echo $LOGIN_RESPONSE | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('refresh',''))" 2>/dev/null)
+    
+    if [ -n "$ACCESS_TOKEN" ] && [ "$ACCESS_TOKEN" != "" ]; then
+      echo -e "${GREEN}✅ 登入成功 (200 OK)${NC}"
+      echo "Access Token: ${ACCESS_TOKEN:0:50}..."
+      echo "Refresh Token: ${REFRESH_TOKEN:0:50}..."
+      echo "User: $(echo $LOGIN_RESPONSE | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin).get('user',{})))" 2>/dev/null)"
     else
       echo -e "${RED}❌ 登入失敗${NC}"
       echo "響應: $LOGIN_RESPONSE"
     fi
     echo ""
     
-    # 測試檢查登入狀態
-    echo -e "${BLUE}🔎 測試檢查登入狀態...${NC}"
-    CHECK_RESPONSE=$(curl -s -X GET ${BASE_URL}/check/ \
-      -b /tmp/auth_cookies.txt)
-    
-    if echo $CHECK_RESPONSE | grep -q "authenticated.*true"; then
-      echo -e "${GREEN}✅ 登入狀態正常${NC}"
-      echo "響應: $CHECK_RESPONSE"
+    # 測試使用 Token 存取受保護的資源（登出需要認證）
+    echo -e "${BLUE}🚪 測試用戶登出 (使用 JWT Token)...${NC}"
+    if [ -n "$ACCESS_TOKEN" ] && [ -n "$REFRESH_TOKEN" ]; then
+      LOGOUT_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST ${BASE_URL}/logout \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+        -d "{\"refresh\":\"${REFRESH_TOKEN}\"}")
+      
+      LOGOUT_BODY=$(echo "$LOGOUT_RESPONSE" | head -n -1)
+      LOGOUT_CODE=$(echo "$LOGOUT_RESPONSE" | tail -n 1)
+      
+      if [ "$LOGOUT_CODE" = "200" ]; then
+        echo -e "${GREEN}✅ 登出成功 (200 OK)${NC}"
+        echo "響應: $LOGOUT_BODY"
+      else
+        echo -e "${RED}❌ 登出失敗 ($LOGOUT_CODE)${NC}"
+        echo "響應: $LOGOUT_BODY"
+      fi
     else
-      echo -e "${RED}❌ 未登入${NC}"
-      echo "響應: $CHECK_RESPONSE"
+      echo -e "${YELLOW}⚠️  跳過登出測試（無有效 Token）${NC}"
     fi
     echo ""
     
-    # 測試登出
-    echo -e "${BLUE}🚪 測試用戶登出...${NC}"
-    LOGOUT_RESPONSE=$(curl -s -X POST ${BASE_URL}/logout/ \
-      -b /tmp/auth_cookies.txt)
-    
-    if echo $LOGOUT_RESPONSE | grep -q "success.*true"; then
-      echo -e "${GREEN}✅ 登出成功${NC}"
-      echo "響應: $LOGOUT_RESPONSE"
-    else
-      echo -e "${RED}❌ 登出失敗${NC}"
-      echo "響應: $LOGOUT_RESPONSE"
-    fi
-    echo ""
-    
-    # 再次檢查登入狀態（應該是未登入）
-    echo -e "${BLUE}🔎 再次檢查登入狀態（應該是未登入）...${NC}"
-    CHECK_RESPONSE2=$(curl -s -X GET ${BASE_URL}/check/ \
-      -b /tmp/auth_cookies.txt)
-    
-    if echo $CHECK_RESPONSE2 | grep -q "authenticated.*false"; then
-      echo -e "${GREEN}✅ 登出狀態正常${NC}"
-      echo "響應: $CHECK_RESPONSE2"
-    else
-      echo -e "${YELLOW}⚠️  狀態檢查異常${NC}"
-      echo "響應: $CHECK_RESPONSE2"
+    # 測試 Token 失效後的存取（應該返回 401）
+    echo -e "${BLUE}🔎 測試已登出後使用舊 Token 存取...${NC}"
+    if [ -n "$REFRESH_TOKEN" ]; then
+      REUSE_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST ${BASE_URL}/logout \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+        -d "{\"refresh\":\"${REFRESH_TOKEN}\"}")
+      
+      REUSE_CODE=$(echo "$REUSE_RESPONSE" | tail -n 1)
+      
+      if [ "$REUSE_CODE" = "401" ]; then
+        echo -e "${GREEN}✅ Token 已正確失效 (401 Unauthorized)${NC}"
+      else
+        echo -e "${YELLOW}⚠️  Token 狀態異常 ($REUSE_CODE)${NC}"
+      fi
     fi
     echo ""
     
