@@ -15,7 +15,7 @@ def health_check():
 # --- 設定 AI 後端的地址 ---
 # 注意：如果是 Docker 之間互連，這裡要用 service name 或內網 IP
 # 例如：http://ai-service:5000/api/remove_bg
-AI_BACKEND_URL = "http://172.17.0.3:5000/api/remove_bg" 
+AI_BACKEND_URL = "http://192.168.233.128:8001/api/remove_bg" 
 
 @app.route('/api/upload-image', methods=['POST'])
 def process_image():
@@ -70,14 +70,21 @@ def process_image():
     print(f"正在將圖片傳送給 AI 後端 ({AI_BACKEND_URL})...")
     
     try:
-        # 準備要寄給 AI 的包裹
-        # 格式：'欄位名': ('檔名', 檔案物件, 'MIME類型')
-        files_to_send = {
-            'file': (filename, image_file, 'image/png')
+        # 將圖片 Bytes 轉回 Base64（AI 期望的格式）
+        image_b64_for_ai = base64.b64encode(image_bytes).decode('utf-8')
+        
+        # 準備發送給 AI 的 JSON 格式
+        payload = {
+            'clothes_image_base64': image_b64_for_ai
         }
         
-        # 發送 POST 請求給 AI (這裡我們變成 Client)
-        ai_response = requests.post(AI_BACKEND_URL, files=files_to_send, timeout=30)
+        # 發送 POST 請求給 AI (JSON 格式)
+        ai_response = requests.post(
+            AI_BACKEND_URL,
+            json=payload,
+            headers={'Content-Type': 'application/json'},
+            timeout=30
+        )
         
         # 檢查 AI 是否成功回應
         if ai_response.status_code == 200:
@@ -86,28 +93,40 @@ def process_image():
             # ==========================================
             # 4. 處理 AI 回傳的結果並給前端 (需求 5)
             # ==========================================
-            # 假設 AI 回傳的是一張直接的圖片檔案 (Binary)
-            # 我們要把它轉成 Base64 回傳給前端顯示，或是直接儲存回傳網址
-            
-            # 這裡示範：存下來並回傳網址 (比較適合你的前端架構)
-            output_filename = f"processed_{filename}"
-            with open(output_filename, "wb") as f:
-                f.write(ai_response.content)
-            
-            return jsonify({
-                "message": "去背成功",
-                "processed_url": f"http://你的IP:5000/download/{output_filename}", 
-                "original_filename": filename
-            })
+            # AI 現在回傳的是 JSON 格式
+            try:
+                ai_result = ai_response.json()
+                
+                # 從 AI 回應中提取 Base64 圖片
+                if 'data' in ai_result and 'clothes_image_processed_base64' in ai_result['data']:
+                    processed_b64 = ai_result['data']['clothes_image_processed_base64']
+                    
+                    # 直接回傳給前端（Base64 格式）
+                    return jsonify({
+                        "message": "去背成功",
+                        "processed_image_base64": processed_b64,
+                        "original_filename": filename
+                    })
+                else:
+                    print(f"AI 回應格式不符: {ai_result}")
+                    return jsonify({'error': 'AI 回應格式錯誤'}), 500
+                    
+            except ValueError as json_err:
+                print(f"AI 回應不是 JSON: {json_err}")
+                return jsonify({'error': '無法解析 AI 回應'}), 500
             
         else:
             print(f"AI 處理失敗: {ai_response.text}")
             return jsonify({'error': 'AI 伺服器處理失敗'}), 500
 
-    except requests.exceptions.ConnectionError:
+    except requests.exceptions.ConnectionError as conn_err:
+        print(f"❌ 無法連線到 AI 伺服器: {conn_err}")
         return jsonify({'error': '無法連線到 AI 伺服器，請檢查 Docker 網路'}), 503
     except Exception as e:
+        import traceback
+        print(f"❌ 轉發過程發生錯誤: {str(e)}")
+        print(traceback.format_exc())
         return jsonify({'error': f'轉發過程發生錯誤: {str(e)}'}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001, debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=True)

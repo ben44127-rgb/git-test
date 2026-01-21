@@ -95,7 +95,7 @@ test_project/
 在 `app.py` 中修改 AI 後端地址：
 
 ```python
-AI_BACKEND_URL = "http://172.17.0.3:5000/api/remove_bg"
+AI_BACKEND_URL = "http://192.168.233.128:8001/api/remove_bg"
 ```
 
 根據你的 Docker 網路配置或 AI 服務地址進行調整。
