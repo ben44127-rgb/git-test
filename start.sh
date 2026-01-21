@@ -432,8 +432,34 @@ start_container() {
     echo "📦 在 Docker 容器內部啟動..."
     echo ""
 
-    # 等待數據庫就緒
-    wait_for_service "PostgreSQL" "${DB_HOST:-db}" "${DB_PORT:-5432}"
+    # 等待 PostgreSQL 數據庫就緒（使用 Python psycopg2 確認連線）
+    echo "⏳ 等待 PostgreSQL 數據庫就緒..."
+    MAX_RETRIES=30
+    RETRY=0
+    until python3 -c "
+import psycopg2
+try:
+    conn = psycopg2.connect(
+        dbname='${DB_NAME:-auth_db}',
+        user='${DB_USER:-auth_user}',
+        password='${DB_PASSWORD:-auth_password_123}',
+        host='${DB_HOST:-db}',
+        port='${DB_PORT:-5432}'
+    )
+    conn.close()
+    print('✅ 數據庫連線成功')
+except Exception as e:
+    print(f'⏳ 數據庫尚未就緒: {e}')
+    exit(1)
+" 2>/dev/null; do
+        RETRY=$((RETRY + 1))
+        if [ $RETRY -ge $MAX_RETRIES ]; then
+            echo "❌ 數據庫連線超時，請檢查 PostgreSQL 服務"
+            exit 1
+        fi
+        echo "   重試 $RETRY/$MAX_RETRIES..."
+        sleep 2
+    done
 
     # 創建必要的目錄
     mkdir -p /app/output /app/logs
@@ -444,15 +470,39 @@ start_container() {
     python3 manage.py migrate --noinput
     echo "✅ 數據庫遷移完成"
 
-    # 啟動 Gunicorn
+    # 自動建立管理員帳號
     echo ""
-    echo "🚀 啟動 Gunicorn 伺服器..."
-    exec gunicorn config.wsgi:application \
-        --bind 0.0.0.0:30000 \
-        --workers 4 \
-        --timeout 300 \
-        --access-logfile /app/logs/access.log \
-        --error-logfile /app/logs/error.log
+    echo "👤 檢查管理員帳號..."
+    python3 manage.py shell <<'PYTHON_SCRIPT'
+from accounts.models import User
+
+if not User.objects.filter(user_name='admin').exists():
+    User.objects.create_superuser(
+        user_name='admin',
+        user_email='admin@admin.com',
+        user_password='admin123'
+    )
+    print('✅ 管理員帳號已建立: admin / admin123')
+else:
+    print('ℹ️  管理員帳號已存在')
+PYTHON_SCRIPT
+
+    # 根據 DJANGO_DEV_MODE 選擇啟動模式
+    echo ""
+    if [ "${DJANGO_DEV_MODE}" = "true" ]; then
+        echo "🔧 開發模式：Hot Reload 已啟用"
+        echo "🚀 啟動 Django 開發伺服器 (port 30000)..."
+        exec python3 manage.py runserver 0.0.0.0:30000
+    else
+        echo "🚀 生產模式：使用 Gunicorn"
+        echo "🚀 啟動 Gunicorn 伺服器 (port 30000)..."
+        exec gunicorn config.wsgi:application \
+            --bind 0.0.0.0:30000 \
+            --workers 4 \
+            --timeout 300 \
+            --access-logfile /app/logs/access.log \
+            --error-logfile /app/logs/error.log
+    fi
 }
 
 # ==========================================

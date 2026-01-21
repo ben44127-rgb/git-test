@@ -36,7 +36,7 @@ services:
       # 從 .env 檔案讀取，如果沒有則使用預設值
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
-      
+
       # 啟用跨域資源共享 (CORS)，允許前端訪問圖片
       MINIO_BROWSER_REDIRECT_URL: http://localhost:9001
     command: server /data --console-address ":9001"
@@ -66,7 +66,7 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-processed-images}
       MINIO_SECURE: "False"
-      
+
       # MinIO 外部訪問地址（前端瀏覽器用這個 URL 訪問圖片）
       # 根據運行環境自行修改：localhost:9000 (本地) 或 192.168.233.128:9000 (Lan IP)
       MINIO_EXTERNAL_URL: ${MINIO_EXTERNAL_URL:-http://192.168.233.128:9000}
@@ -97,31 +97,12 @@ services:
       - ./accounts:/app/accounts
       - ./config:/app/config
       - ./manage.py:/app/manage.py
+      - ./start.sh:/app/start.sh
       # 日誌目錄
       - ./logs:/app/logs
-    # 根據 DJANGO_DEV_MODE 環境變數決定啟動命令
-    # 開發模式：使用 Django runserver（支援 hot reload）
-    # 生產模式：使用 Dockerfile 中的預設命令（Gunicorn）
-    command: >
-      sh -c "
-        if [ \"$$DJANGO_DEV_MODE\" = \"true\" ]; then
-          echo '🔧 開發模式：Hot Reload 已啟用';
-          echo '⏳ 等待 MinIO 和數據庫服務...';
-          sleep 10;
-          echo '🔄 運行數據庫遷移...';
-          python3 manage.py migrate --noinput;
-          echo '🚀 啟動 Django 開發伺服器...';
-          python3 manage.py runserver 0.0.0.0:30000;
-        else
-          echo '🚀 生產模式：使用 Gunicorn';
-          echo '⏳ 等待 MinIO 和數據庫服務...';
-          sleep 10;
-          echo '🔄 運行數據庫遷移...';
-          python3 manage.py migrate --noinput;
-          echo '✅ 啟動 Gunicorn 伺服器...';
-          gunicorn config.wsgi:application --bind 0.0.0.0:30000 --workers 4 --timeout 300;
-        fi
-      "
+    # 使用 start.sh 作為啟動命令
+    # 在容器內自動偵測為 container 模式：等待 DB → migrate → 建立 admin → 啟動服務
+    command: [ "/app/start.sh" ]
     depends_on:
       minio:
         condition: service_started

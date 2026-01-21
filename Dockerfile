@@ -53,5 +53,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:30000/health || exit 1
 
 # 使用啟動腳本
-# 此腳本會自動偵測環境、處理數據庫遷移、等待依賴服務、啟動 Gunicorn
+# start.sh 會自動偵測環境（容器內/Docker/本地）並執行對應的啟動流程
 CMD ["/app/start.sh"]
