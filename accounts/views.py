@@ -151,6 +151,35 @@ def logout_user(request):
         )
 
 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def list_users(request):
+    """
+    查看所有使用者（測試用）
+    GET account/user/list
+
+    Success 200:
+        [{"id": 1, "username": "user1", "email": "user1@example.com"}, ...]
+    """
+    users = User.objects.all().order_by('-user_created_time')
+    data = []
+    for user in users:
+        data.append({
+            'id': user.user_id,
+            'uid': str(user.user_uid),
+            'username': user.user_name,
+            'email': user.user_email,
+            'weight': user.user_weight,
+            'height': user.user_height,
+            'is_active': user.is_active,
+            'created_time': user.user_created_time.isoformat() if user.user_created_time else None,
+        })
+    return Response({
+        'count': len(data),
+        'users': data,
+    }, status=status.HTTP_200_OK)
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def delete_user(request):

@@ -142,7 +142,7 @@ stop_docker() {
     fi
     
     # 檢查是否有容器在運行
-    if ! docker ps | grep -q "django-backend\|minio"; then
+    if ! docker ps | grep -q "django-backend\|minio\|auth_postgres"; then
         echo "⚠️  未發現運行中的 Docker 容器"
         return
     fi
@@ -150,7 +150,7 @@ stop_docker() {
     echo "📦 使用命令: $COMPOSE_CMD"
     echo ""
     echo "🔍 當前運行的容器："
-    docker ps --filter "name=django-backend" --filter "name=minio" --format "table {{.Names}}\t{{.Status}}"
+    docker ps --filter "name=django-backend" --filter "name=minio" --filter "name=auth_postgres" --format "table {{.Names}}\t{{.Status}}"
     
     # 停止服務
     echo ""
@@ -159,10 +159,10 @@ stop_docker() {
     
     # 確認停止
     echo ""
-    if docker ps | grep -q "django-backend\|minio"; then
+    if docker ps | grep -q "django-backend\|minio\|auth_postgres"; then
         echo "⚠️  部分容器仍在運行"
     else
-        echo "✅ Docker 服務已停止"
+        echo "✅ Docker 服務已全部停止（PostgreSQL + MinIO + Backend）"
     fi
 }
 
