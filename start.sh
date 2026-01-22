@@ -46,21 +46,62 @@ else
     echo "✅ Django 已安裝"
 fi
 
-# 檢查 MinIO 容器是否運行
+# 檢查 Docker 和 Docker Compose 服務
 echo ""
-echo "🔍 檢查 MinIO 服務..."
-if command -v docker &> /dev/null && docker ps 2>/dev/null | grep -q minio; then
-    echo "✅ MinIO 服務正在運行"
+echo "🔍 檢查 Docker 和 Docker Compose..."
+if ! command -v docker &> /dev/null; then
+    echo "❌ 錯誤：未找到 Docker，請先安裝 Docker"
+    exit 1
+fi
+
+if ! docker info &> /dev/null; then
+    echo "❌ 錯誤：Docker 未運行，請啟動 Docker 服務"
+    exit 1
+fi
+
+COMPOSE_CMD=""
+if command -v docker-compose &> /dev/null; then
+    COMPOSE_CMD="docker-compose"
+elif docker compose version &> /dev/null 2>&1; then
+    COMPOSE_CMD="docker compose"
 else
-    echo "⚠️  MinIO 服務未運行"
-    if command -v docker-compose &> /dev/null; then
-        echo "   可以使用以下命令啟動："
-        echo "   docker-compose up -d minio"
-    elif docker compose version &> /dev/null 2>&1; then
-        echo "   可以使用以下命令啟動："
-        echo "   docker compose up -d minio"
+    echo "❌ 錯誤：未找到 docker-compose，請先安裝 Docker Compose"
+    exit 1
+fi
+
+echo "✅ Docker 環境檢查完成，使用命令：$COMPOSE_CMD"
+
+# 檢查容器是否運行
+echo ""
+echo "🔍 檢查容器服務狀態..."
+MINIO_RUNNING=$(docker ps 2>/dev/null | grep -q minio && echo "true" || echo "false")
+BACKEND_RUNNING=$(docker ps 2>/dev/null | grep -q django-backend && echo "true" || echo "false")
+
+if [ "$MINIO_RUNNING" = "true" ] && [ "$BACKEND_RUNNING" = "true" ]; then
+    echo "✅ MinIO 和 Django Backend 都已在運行"
+else
+    echo "⚠️  檢測到服務未運行，正在啟動所有容器..."
+    echo "📦 啟動 MinIO 和 Django Backend..."
+    $COMPOSE_CMD up -d
+    
+    if [ $? -eq 0 ]; then
+        echo "⏳ 等待容器啟動..."
+        sleep 5
+        
+        # 驗證容器狀態
+        if docker ps | grep -q minio && docker ps | grep -q django-backend; then
+            echo "✅ MinIO 和 Django Backend 啟動成功"
+            echo "   MinIO API: http://localhost:9000"
+            echo "   MinIO 控制台: http://localhost:9001"
+            echo "   Django Backend: http://localhost:30000"
+        else
+            echo "❌ 部分容器啟動失敗，請檢查日誌"
+            $COMPOSE_CMD logs
+            exit 1
+        fi
     else
-        echo "   請確保 MinIO 服務正在運行"
+        echo "❌ 容器啟動失敗"
+        exit 1
     fi
 fi
 

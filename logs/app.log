@@ -1,0 +1,4 @@
+Watching for file changes with StatReloader
+INFO 2026-01-22 17:03:17,744 autoreload Watching for file changes with StatReloader
+INFO 2026-01-22 17:03:18,028 views ✅ Bucket 已存在：processed-images
+[22/Jan/2026 17:03:22] "GET /health HTTP/1.1" 200 72
