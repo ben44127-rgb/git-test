@@ -44,7 +44,7 @@ services:
       # AI 後端配置
       # 如果 AI 服務也在 Docker 中，使用服務名稱
       # 如果在宿主機上，使用 host.docker.internal
-      AI_BACKEND_URL: http://host.docker.internal:8080/api/remove_bg
+      AI_BACKEND_URL: http://192.168.233.128:8002/api/remove_bg
 
       # Django 配置
       DEBUG: "False"
