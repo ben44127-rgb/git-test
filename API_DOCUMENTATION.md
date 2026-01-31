@@ -261,7 +261,7 @@ fetch('http://localhost:30000/api/upload-image', {
    - 驗證參數完整性
    - 讀取圖片二進位資料
 
-3. **轉發給 AI 服務** (POST http://localhost:8002/api/remove_bg)
+3. **轉發給 AI 服務** (POST http://192.168.233.128:8002/api/remove_bg)
    - 欄位: `clothes_image` (檔案流) + `clothes_filename` (檔案名稱)
 
 4. **AI 服務處理**
@@ -296,7 +296,7 @@ DEBUG=True
 DJANGO_SECRET_KEY=your-secret-key-here
 
 # AI 後端配置
-AI_BACKEND_URL=http://localhost:8002/api/remove_bg
+AI_BACKEND_URL=http://192.168.233.128:8002/api/remove_bg
 AI_REQUEST_TIMEOUT=60
 
 # MinIO 配置
@@ -384,7 +384,7 @@ tail -f logs/django_app.log
 
 **解決方案**:
 1. 檢查 AI 服務是否在 8002 端口運行
-2. 測試連接: `curl http://localhost:8002/health` (如果有健康檢查端點)
+2. 測試連接: `curl http://192.168.233.128:8002/health` (如果有健康檢查端點)
 3. 檢查 .env 中的 `AI_BACKEND_URL` 配置
 
 ---

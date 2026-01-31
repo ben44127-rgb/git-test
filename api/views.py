@@ -128,7 +128,7 @@ def upload_and_process(request):
     - image_data: 圖片檔案（multipart/form-data 格式）
     - filename: 檔案名稱（字串）
     
-    AI 後端位址：http://localhost:8002/api/remove_bg
+    AI 後端位址：http://192.168.233.128:8002/api/remove_bg
     AI 請求格式：
     - clothes_image: 圖片檔案流
     - clothes_filename: 檔案名稱
@@ -491,6 +491,7 @@ def upload_and_process(request):
     response_data = {
         "success": True,
         "message": "圖片處理和儲存成功",
+        "processed_url": presigned_url,
         "ai_status": {
             "status_code": 200,
             "message": "去背成功"
