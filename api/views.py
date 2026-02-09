@@ -45,6 +45,10 @@ def get_minio_client():
     取得 MinIO 客戶端實例
     這個函數負責建立和返回 MinIO 客戶端物件
     如果連接失敗，會返回 None
+    
+    重要：這個函數會在每次上傳時被呼叫，而不是在模組載入時
+    這樣可以確保 MinIO 服務可用時能夠正常連接，
+    即使在容器啟動時 MinIO 服務還未就緒
     """
     try:
         # 建立 MinIO 客戶端物件
@@ -64,6 +68,43 @@ def get_minio_client():
         else:
             logger.info(f"✅ Bucket 已存在：{settings.MINIO_BUCKET_NAME}")
         
+        # 設定 Bucket CORS 配置，允許前端跨域訪問圖片
+        try:
+            from minio.commonconfig import CORSConfig
+            cors_config = CORSConfig(
+                [
+                    {
+                        "AllowedMethods": ["GET", "HEAD", "PUT", "POST"],
+                        "AllowedOrigins": ["*"],
+                        "AllowedHeaders": ["*"],
+                        "ExposeHeaders": ["ETag", "x-amz-version-id"]
+                    }
+                ]
+            )
+            client.set_bucket_cors(settings.MINIO_BUCKET_NAME, cors_config)
+            logger.info(f"✅ 已設定 Bucket CORS 配置")
+        except Exception as cors_error:
+            logger.warning(f"⚠️  設定 CORS 失敗（可能已設定）：{cors_error}")
+        
+        # 設定 Bucket 政策為公開讀取（不需要預簽名）
+        try:
+            import json
+            policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Principal": {"AWS": "*"},
+                        "Action": "s3:GetObject",
+                        "Resource": f"arn:aws:s3:::{settings.MINIO_BUCKET_NAME}/*"
+                    }
+                ]
+            }
+            client.set_bucket_policy(settings.MINIO_BUCKET_NAME, json.dumps(policy))
+            logger.info(f"✅ 已設定 Bucket 政策為公開讀取")
+        except Exception as policy_error:
+            logger.warning(f"⚠️  設定 Bucket 政策失敗（可能已設定）：{policy_error}")
+        
         return client
         
     except Exception as e:
@@ -71,9 +112,6 @@ def get_minio_client():
         logger.error(f"❌ MinIO 初始化失敗：{e}")
         logger.error(f"   提示：請確認 MinIO 服務是否啟動，以及帳號密碼是否正確")
         return None
-
-# 在模組載入時初始化 MinIO 客戶端
-minio_client = get_minio_client()
 
 # ==========================================
 # 【第三部分】健康檢查視圖
@@ -392,6 +430,9 @@ def upload_and_process(request):
     unique_filename = f"processed_{unique_id}_{base_name}.png"
     logger.info(f"   產生唯一檔案名稱：{unique_filename}")
     
+    # 取得 MinIO 客戶端（每次都重新取得，確保連接有效）
+    minio_client = get_minio_client()
+    
     # 檢查 MinIO 客戶端是否可用
     if minio_client is None:
         logger.error("❌ MinIO 客戶端不可用")
@@ -473,13 +514,34 @@ def upload_and_process(request):
             expires=timedelta(days=7)  # 7天後過期
         )
         
-        logger.info(f"✅ 產生預簽名 URL 成功")
-        logger.info(f"   URL（前100字元）：{presigned_url[:100]}...")
+        logger.info(f"✅ 原始預簽名 URL：{presigned_url[:100]}...")
+        
+        # 修正：將內部地址轉換為外部地址（讓前端瀏覽器可以存取）
+        # MinIO 可能返回多種格式的 URL，都需要替換
+        replacements = [
+            ('http://minio:9000', settings.MINIO_EXTERNAL_URL),
+            ('https://minio:9000', settings.MINIO_EXTERNAL_URL.replace('http://', 'https://')),
+            ('http://minio/', settings.MINIO_EXTERNAL_URL + '/'),
+        ]
+        
+        for old_url, new_url in replacements:
+            if old_url in presigned_url:
+                presigned_url = presigned_url.replace(old_url, new_url)
+                logger.info(f"✅ 已將 '{old_url}' 轉換為 '{new_url}'")
+                break
+        
+        logger.info(f"✅ 轉換後的預簽名 URL：{presigned_url[:100]}...")
+        
+        # 同時產生不需要簽名的公開 URL
+        # 因為 Bucket 已設定為公開讀取，可以直接訪問
+        public_url = f"{settings.MINIO_EXTERNAL_URL}/{settings.MINIO_BUCKET_NAME}/{unique_filename}"
+        logger.info(f"✅ 公開 URL：{public_url[:100]}...")
         
     except Exception as e:
-        logger.error(f"❌ 產生預簽名 URL 失敗：{e}")
+        logger.error(f"❌ 產生 URL 失敗：{e}")
         # 即使 URL 產生失敗，也返回成功（因為檔案已上傳）
         presigned_url = None
+        public_url = None
     
     # ==========================================
     # 【步驟 9】返回完整的狀態資訊給前端
@@ -491,7 +553,7 @@ def upload_and_process(request):
     response_data = {
         "success": True,
         "message": "圖片處理和儲存成功",
-        "processed_url": presigned_url,
+        "processed_url": public_url or presigned_url,  # 優先使用公開 URL
         "ai_status": {
             "status_code": 200,
             "message": "去背成功"
@@ -501,12 +563,14 @@ def upload_and_process(request):
             "filename": unique_filename,
             "original_filename": processed_filename,
             "storage": "minio",
-            "bucket": settings.MINIO_BUCKET_NAME
+            "bucket": settings.MINIO_BUCKET_NAME,
+            "public_url": public_url,  # 新增公開 URL
+            "signed_url": presigned_url  # 新增預簽名 URL（備用）
         }
     }
     
     # 如果有 URL，新增到響應中
-    if presigned_url:
-        response_data["storage_status"]["url"] = presigned_url
+    if public_url or presigned_url:
+        response_data["storage_status"]["url"] = public_url or presigned_url
     
     return JsonResponse(response_data)
