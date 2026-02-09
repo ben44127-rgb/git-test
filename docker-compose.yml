@@ -17,6 +17,9 @@ services:
       # 從 .env 檔案讀取，如果沒有則使用預設值
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+      
+      # 啟用跨域資源共享 (CORS)，允許前端訪問圖片
+      MINIO_BROWSER_REDIRECT_URL: http://localhost:9001
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data # 持久化數據
@@ -44,6 +47,10 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-processed-images}
       MINIO_SECURE: "False"
+      
+      # MinIO 外部訪問地址（前端瀏覽器用這個 URL 訪問圖片）
+      # 根據運行環境自行修改：localhost:9000 (本地) 或 192.168.233.128:9000 (Lan IP)
+      MINIO_EXTERNAL_URL: ${MINIO_EXTERNAL_URL:-http://192.168.233.128:9000}
 
       # AI 後端配置
       # 如果 AI 服務也在 Docker 中，使用服務名稱
