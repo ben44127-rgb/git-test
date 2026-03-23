@@ -33,7 +33,6 @@ RUN chmod +x /app/start.sh
 # 複製應用程式代碼
 COPY manage.py .
 COPY config/ config/
-COPY api/ api/
 COPY accounts/ accounts/
 
 # 複製環境變數檔案（如果存在）

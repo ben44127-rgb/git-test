@@ -93,7 +93,6 @@ services:
       DJANGO_DEV_MODE: ${DJANGO_DEV_MODE:-false}
     volumes:
       # 掛載程式碼目錄以支援 hot reload（開發模式）
-      - ./api:/app/api
       - ./accounts:/app/accounts
       - ./config:/app/config
       - ./manage.py:/app/manage.py
