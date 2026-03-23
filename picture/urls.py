@@ -20,4 +20,15 @@ urlpatterns = [
     # 圖片上傳和處理端點
     # 存取：http://localhost:30000/picture/clothes/upload_image
     path('picture/clothes/upload_image', views.upload_and_process, name='upload_and_process'),
+    
+    # 衣服 CRUD 端點
+    # POST: 創建衣服（需要管理員權限）
+    # GET: 列表衣服（支持分頁、篩選）
+    path('picture/clothes/', views.clothes_list_create, name='clothes_list_create'),
+    
+    # 衣服詳情端點
+    # GET: 獲取單個衣服
+    # PUT: 更新衣服（需要管理員權限）
+    # DELETE: 刪除衣服（需要管理員權限）
+    path('picture/clothes/<int:clothes_id>/', views.clothes_detail, name='clothes_detail'),
 ]

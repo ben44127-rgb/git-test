@@ -717,3 +717,265 @@ def upload_and_process(request):
 
     return JsonResponse(response_data)
 
+
+# ==========================================
+# 【衣服管理 CRUD API】
+# ==========================================
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.response import Response
+from rest_framework import status
+from django.shortcuts import get_object_or_404
+from django.core.paginator import Paginator
+from accounts.models import Clothes, Style, Color
+from .serializers import ClothesSerializer, ClothesCreateSerializer, ClothesDetailSerializer
+import uuid
+
+
+@api_view(['POST', 'GET'])
+@permission_classes([IsAuthenticated])
+def clothes_list_create(request):
+    """
+    衣服列表和創建端點
+    
+    POST: 創建新衣服 (需要管理員權限)
+    GET: 獲取衣服列表 (支持分頁和篩選)
+    """
+    
+    if request.method == 'POST':
+        # 檢查是否為管理員
+        if not request.user.is_staff and not request.user.is_superuser:
+            return Response(
+                {'detail': '只有管理員才能創建衣服'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # 驗證數據
+        serializer = ClothesCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # 創建衣服
+            clothes_uid = str(uuid.uuid4())
+            clothes = Clothes.objects.create(
+                f_user_uid=request.user.user_uid,
+                clothes_uid=clothes_uid,
+                clothes_category=serializer.validated_data['clothes_category'],
+                clothes_arm_length=serializer.validated_data.get('clothes_arm_length', 0),
+                clothes_shoulder_width=serializer.validated_data.get('clothes_shoulder_width', 0),
+                clothes_waistline=serializer.validated_data.get('clothes_waistline', 0),
+                clothes_leg_length=serializer.validated_data.get('clothes_leg_length', 0),
+                clothes_image_url=serializer.validated_data.get('clothes_image_url', ''),
+            )
+            
+            # 創建顏色
+            for color_name in serializer.validated_data.get('colors', []):
+                Color.objects.create(
+                    f_clothes_uid=clothes_uid,
+                    color_uid=str(uuid.uuid4()),
+                    color_name=color_name
+                )
+            
+            # 創建風格
+            for style_name in serializer.validated_data.get('styles', []):
+                Style.objects.create(
+                    f_clothes_uid=clothes_uid,
+                    style_uid=str(uuid.uuid4()),
+                    style_name=style_name
+                )
+            
+            logger.info(f"✅ 管理員 {request.user.user_name} 創建衣服: {clothes_uid}")
+            
+            # 返回創建的衣服
+            output_serializer = ClothesDetailSerializer(clothes)
+            return Response(
+                output_serializer.data,
+                status=status.HTTP_201_CREATED
+            )
+        
+        except Exception as e:
+            logger.error(f"❌ 創建衣服失敗: {str(e)}")
+            return Response(
+                {'detail': f'創建衣服失敗: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    # GET: 獲取衣服列表
+    try:
+        # 獲取查詢參數
+        category = request.query_params.get('category', None)
+        page = request.query_params.get('page', 1)
+        limit = request.query_params.get('limit', 20)
+        
+        # 構建查詢
+        queryset = Clothes.objects.all().order_by('-clothes_created_time')
+        
+        # 按分類篩選
+        if category:
+            queryset = queryset.filter(clothes_category__icontains=category)
+        
+        # 分頁
+        paginator = Paginator(queryset, int(limit))
+        paginated_clothes = paginator.get_page(int(page))
+        
+        # 序列化
+        serializer = ClothesDetailSerializer(paginated_clothes, many=True)
+        
+        return Response({
+            'count': paginator.count,
+            'total_pages': paginator.num_pages,
+            'current_page': int(page),
+            'results': serializer.data
+        }, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        logger.error(f"❌ 獲取衣服列表失敗: {str(e)}")
+        return Response(
+            {'detail': f'獲取失敗: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def clothes_detail(request, clothes_id):
+    """
+    衣服詳情端點
+    
+    GET: 獲取衣服詳情
+    PUT: 更新衣服 (需要管理員權限)
+    DELETE: 刪除衣服 (需要管理員權限)
+    """
+    
+    # 獲取衣服
+    clothes = get_object_or_404(Clothes, clothes_id=clothes_id)
+    
+    if request.method == 'GET':
+        try:
+            serializer = ClothesDetailSerializer(clothes)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"❌ 獲取衣服詳情失敗: {str(e)}")
+            return Response(
+                {'detail': f'獲取失敗: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    elif request.method == 'PUT':
+        # 檢查是否為管理員
+        if not request.user.is_staff and not request.user.is_superuser:
+            return Response(
+                {'detail': '只有管理員才能更新衣服'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # 驗證數據
+        serializer = ClothesCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # 更新衣服基本信息
+            clothes.clothes_category = serializer.validated_data.get(
+                'clothes_category',
+                clothes.clothes_category
+            )
+            clothes.clothes_arm_length = serializer.validated_data.get(
+                'clothes_arm_length',
+                clothes.clothes_arm_length
+            )
+            clothes.clothes_shoulder_width = serializer.validated_data.get(
+                'clothes_shoulder_width',
+                clothes.clothes_shoulder_width
+            )
+            clothes.clothes_waistline = serializer.validated_data.get(
+                'clothes_waistline',
+                clothes.clothes_waistline
+            )
+            clothes.clothes_leg_length = serializer.validated_data.get(
+                'clothes_leg_length',
+                clothes.clothes_leg_length
+            )
+            clothes.clothes_image_url = serializer.validated_data.get(
+                'clothes_image_url',
+                clothes.clothes_image_url
+            )
+            clothes.save()
+            
+            # 更新顏色
+            if 'colors' in serializer.validated_data:
+                Color.objects.filter(f_clothes_uid=clothes.clothes_uid).delete()
+                for color_name in serializer.validated_data['colors']:
+                    Color.objects.create(
+                        f_clothes_uid=clothes.clothes_uid,
+                        color_uid=str(uuid.uuid4()),
+                        color_name=color_name
+                    )
+            
+            # 更新風格
+            if 'styles' in serializer.validated_data:
+                Style.objects.filter(f_clothes_uid=clothes.clothes_uid).delete()
+                for style_name in serializer.validated_data['styles']:
+                    Style.objects.create(
+                        f_clothes_uid=clothes.clothes_uid,
+                        style_uid=str(uuid.uuid4()),
+                        style_name=style_name
+                    )
+            
+            logger.info(f"✅ 管理員 {request.user.user_name} 更新衣服: {clothes.clothes_uid}")
+            
+            # 返回更新的衣服
+            output_serializer = ClothesDetailSerializer(clothes)
+            return Response(
+                output_serializer.data,
+                status=status.HTTP_200_OK
+            )
+        
+        except Exception as e:
+            logger.error(f"❌ 更新衣服失敗: {str(e)}")
+            return Response(
+                {'detail': f'更新失敗: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    elif request.method == 'DELETE':
+        # 檢查是否為管理員
+        if not request.user.is_staff and not request.user.is_superuser:
+            return Response(
+                {'detail': '只有管理員才能刪除衣服'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        try:
+            clothes_uid = clothes.clothes_uid
+            clothes_category = clothes.clothes_category
+            
+            # 刪除相關的顏色和風格
+            Color.objects.filter(f_clothes_uid=clothes_uid).delete()
+            Style.objects.filter(f_clothes_uid=clothes_uid).delete()
+            
+            # 刪除衣服
+            clothes.delete()
+            
+            logger.info(f"✅ 管理員 {request.user.user_name} 刪除衣服: {clothes_uid}")
+            
+            return Response(
+                {'detail': '衣服已刪除'},
+                status=status.HTTP_200_OK
+            )
+        
+        except Exception as e:
+            logger.error(f"❌ 刪除衣服失敗: {str(e)}")
+            return Response(
+                {'detail': f'刪除失敗: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
