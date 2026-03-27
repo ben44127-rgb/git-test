@@ -297,11 +297,6 @@
       "range": [0, 300],
       "unit": "cm",
       "description": "衣服腰圍（衣服腰部的圓周）"
-    },
-    "user_uid": {
-      "type": "uuid string",
-      "required": false,
-      "description": "⚠️ 不要提供 - 使用 JWT Bearer Token 時，用戶信息自動從 Token 中提取，無需此參數"
     }
   }
   ```
@@ -309,7 +304,6 @@
   **📝 參數說明**:
   - **必填參數**: `image_data` (衣服圖片文件)
   - **可選參數**: `clothes_arm_length`, `clothes_leg_length`, `clothes_shoulder_width`, `clothes_waistline` (所有尺寸參數不提供時默認為 0)
-  - **無需提供**: `user_uid` (用戶信息自動從 JWT Token 中提取)
   - 衣服尺寸參數必須是 **非負整數**，超出範圍將返回 400 Bad Request
   - 衣服尺寸數據會被發送給 AI 後端進行智能處理
   - 衣服尺寸數據會被持久化存儲在數據庫中
