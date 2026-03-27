@@ -215,3 +215,82 @@ def delete_user(request):
         return Response({'message': '帳號已刪除'}, status=status.HTTP_200_OK)
 
     return Response(serializer.errors, status=status.HTTP_403_FORBIDDEN)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def user_info(request):
+    """
+    使用者上傳模特基本資料
+    POST account/user/user_info
+
+    Headers:
+        Authorization: Bearer <access_token>
+
+    Request:
+        {
+            "user_height": 180,
+            "user_weight": 70,
+            "user_arm_length": 65,
+            "user_shoulder_width": 45,
+            "user_waistline": 80,
+            "user_leg_length": 105
+        }
+
+    Success 200:
+        {
+            "id": 12345,
+            "username": "model_user",
+            "height": 175,
+            "weight": 70,
+            "arm_length": 65,
+            "shoulder_width": 40,
+            "waistline": 80,
+            "leg_length": 92,
+            "updated_time": "2026-01-22T10:30:45.123456Z"
+        }
+
+    Error 400:
+        {"detail": "驗證失敗（超出合理範圍）"}
+
+    Error 401:
+        {"detail": "身分認證資訊未提供。"}
+    """
+    from .serializers import UserBodyMeasurementSerializer
+    
+    serializer = UserBodyMeasurementSerializer(data=request.data)
+
+    if serializer.is_valid():
+        user = request.user
+        # 更新用戶數據（只更新提供的字段）
+        validated_data = serializer.validated_data
+        
+        if 'user_height' in validated_data:
+            user.user_height = validated_data['user_height']
+        if 'user_weight' in validated_data:
+            user.user_weight = validated_data['user_weight']
+        if 'user_arm_length' in validated_data:
+            user.user_arm_length = validated_data['user_arm_length']
+        if 'user_shoulder_width' in validated_data:
+            user.user_shoulder_width = validated_data['user_shoulder_width']
+        if 'user_waistline' in validated_data:
+            user.user_waistline = validated_data['user_waistline']
+        if 'user_leg_length' in validated_data:
+            user.user_leg_length = validated_data['user_leg_length']
+        
+        user.save()
+
+        logger.info(f"✅ 使用者更新身體資料成功: {user.user_name}")
+        return Response({
+            'id': user.user_id,
+            'username': user.user_name,
+            'height': user.user_height,
+            'weight': user.user_weight,
+            'arm_length': user.user_arm_length,
+            'shoulder_width': user.user_shoulder_width,
+            'waistline': user.user_waistline,
+            'leg_length': user.user_leg_length,
+            'updated_time': user.user_updated_time.isoformat() if user.user_updated_time else None,
+        }, status=status.HTTP_200_OK)
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

@@ -34,6 +34,7 @@ RUN chmod +x /app/start.sh
 COPY manage.py .
 COPY config/ config/
 COPY accounts/ accounts/
+COPY picture/ picture/
 
 # 複製環境變數檔案（如果存在）
 COPY .env* ./

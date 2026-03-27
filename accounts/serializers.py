@@ -119,3 +119,36 @@ class UserDeleteSerializer(serializers.Serializer):
         if not user.check_password(value):
             raise serializers.ValidationError("密碼不正確。")
         return value
+
+
+class UserBodyMeasurementSerializer(serializers.ModelSerializer):
+    """
+    用戶身體測量數據序列化器
+    
+    用於上傳和更新用戶的身體測量信息
+    Request: {"user_height", "user_weight", "user_arm_length", "user_shoulder_width", "user_waistline", "user_leg_length"}
+    """
+    user_height = serializers.IntegerField(required=False, min_value=50, max_value=250, help_text='身高(cm)')
+    user_weight = serializers.IntegerField(required=False, min_value=20, max_value=300, help_text='體重(kg)')
+    user_arm_length = serializers.IntegerField(required=False, min_value=30, max_value=100, help_text='臂長(cm)')
+    user_shoulder_width = serializers.IntegerField(required=False, min_value=20, max_value=100, help_text='肩寬(cm)')
+    user_waistline = serializers.IntegerField(required=False, min_value=40, max_value=200, help_text='腰圍(cm)')
+    user_leg_length = serializers.IntegerField(required=False, min_value=50, max_value=150, help_text='腿長(cm)')
+
+    class Meta:
+        model = User
+        fields = ('user_height', 'user_weight', 'user_arm_length', 'user_shoulder_width', 'user_waistline', 'user_leg_length')
+
+    def validate(self, attrs):
+        """驗證身體數據的合理範圍"""
+        # 確保至少有一個字段被提供
+        if not attrs:
+            raise serializers.ValidationError("必須提供至少一個身體測量數據。")
+        
+        # 驗證身高和腿長的比例
+        height = attrs.get('user_height')
+        leg_length = attrs.get('user_leg_length')
+        if height and leg_length and leg_length > height:
+            raise serializers.ValidationError("腿長不應超過身高。")
+        
+        return attrs
