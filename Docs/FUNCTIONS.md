@@ -417,66 +417,8 @@
 
 ---
 
-### 2.2 用戶查看自己的衣服列表
-- **功能編號**: `CLOTHES-002` ⭐ 更新
-- **模組**: `picture`
-- **Actor**: `user` (已認證用戶) - 蓋里管理員可查看所有
-- **HTTP 方法**: `GET`
-- **API 路徑**: `/picture/clothes/my`
-- **請求格式**: `application/json`
-- **驗證方式**: `JWT Bearer Token`
-- **功能說明**:
-  - 蓋賬獲取當前用戶的衣服列表
-  - 管理員夠實可查看所有衣服
-  - 支持分頁、篩選
-  - 可按分類篩選
-- **查詢參數**:
-  ```
-  page: 1 (分頁頁數)
-  limit: 20 (每頁數量)
-  category: "上衣" (按分類篩選，可選)
-  ```
-- **示例**:
-  ```
-  GET /picture/clothes/my?page=1&limit=20&category=上衣
-  ```
-- **Headers**:
-  ```
-  Authorization: Bearer <access_token>
-  ```
-- **成功回應 (200 OK)**:
-  ```json
-  {
-    "count": 15,
-    "total_pages": 1,
-    "current_page": 1,
-    "results": [
-      {
-        "clothes_id": 1,
-        "clothes_uid": "550e8400-e29b-41d4-a716-446655440000",
-        "clothes_category": "上衣",
-        "clothes_arm_length": 60,
-        "clothes_shoulder_width": 45,
-        "clothes_waistline": 80,
-        "clothes_leg_length": 0,
-        "clothes_image_url": "http://minio.example.com/...",
-        "clothes_favorite": false,
-        "clothes_created_time": "2026-03-27T16:00:00Z",
-        "clothes_updated_time": "2026-03-27T16:00:00Z",
-        "colors": [{"color_id": 1, "color_uid": "...", "color_name": "藍色"}],
-        "styles": [{"style_id": 1, "style_uid": "...", "style_name": "休閒"}]
-      }
-    ]
-  }
-  ```
-- **失敗回應**:
-  - `401 Unauthorized`: 簽證失敗或 Token 過期
-  - `500 Internal Server Error`: 伺服器內部錯誤
-
----
-
-### 2.3 用戶查看喜歡的衣服/穿搭列表
-- **功能編號**: `CLOTHES-004`
+### 2.2 用戶查看喜歡的衣服/穿搭列表
+- **功能編號**: `CLOTHES-003`
 - **模組**: `picture`
 - **Actor**: `user` (已認證用戶)
 - **HTTP 方法**: `GET`
@@ -513,14 +455,89 @@
   - `401 Unauthorized`: Token 無效或過期
   - `500 Internal Server Error`: 伺服器內部錯誤
 
+#### 2.2.1 標記衣服為喜歡
+**功能編號**: `CLOTHES-003-MARK`  
+**HTTP 方法**: `PATCH`  
+**API 路徑**: `/picture/clothes/<clothes_uid>/favorite`
+
+- **輸入參數** (JSON):
+  ```json
+  {
+    "favorite": true  // true 表示喜歡，false 表示取消喜歡
+  }
+  ```
+
+- **Headers**:
+  ```
+  Authorization: Bearer <JWT_TOKEN>
+  Content-Type: application/json
+  ```
+
+- **成功回應 (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "message": "已標記為喜歡",
+    "clothes_uid": "550e8400-e29b-41d4-a716-446655440000",
+    "clothes_favorite": true
+  }
+  ```
+  或取消喜歡時：
+  ```json
+  {
+    "success": true,
+    "message": "已取消喜歡",
+    "clothes_uid": "550e8400-e29b-41d4-a716-446655440000",
+    "clothes_favorite": false
+  }
+  ```
+
+- **失敗回應**:
+  - `400 Bad Request`: 缺少 favorite 參數
+  - `401 Unauthorized`: Token 無效或過期
+  - `404 Not Found`: 衣服不存在
+  - `500 Internal Server Error`: 伺服器內部錯誤
+
+**📊 快速參考表** ⭐ 衣服收藏相關操作：
+
+| 操作 | HTTP 方法 | API 路徑 | 身份要求 | 返回狀態碼 |
+|------|----------|---------|---------|----------|
+| 查看喜歡的衣服 | GET | `/picture/clothes/favorites` | 認證用戶 | 200 |
+| 標記為喜歡 | PATCH | `/picture/clothes/<id>/favorite` | 認證用戶 | 200 |
+| 取消喜歡 | PATCH | `/picture/clothes/<id>/favorite` | 認證用戶 | 200 |
+
+**🔄 工作流程**：
+
+```
+1. 用戶查看衣服詳情
+   ├─ GET /picture/clothes/<id>/
+   └─ 獲得完整的衣服信息（包含 clothes_favorite 當前狀態）
+
+2. 標記為喜歡
+   ├─ PATCH /picture/clothes/<id>/favorite
+   ├─ Body: {"favorite": true}
+   └─ 返回成功狀態
+
+3. 查看所有喜歡的衣服
+   ├─ GET /picture/clothes/favorites
+   ├─ 支持分頁 (?page=1&limit=20)
+   └─ 返回標記為喜歡的衣服列表
+
+4. 取消喜歡
+   ├─ PATCH /picture/clothes/<id>/favorite
+   ├─ Body: {"favorite": false}
+   └─ 返回成功狀態
+```
+
 ---
 
-### 2.4 用戶個人照片管理（CRUD）
+### 2.3 用戶個人照片管理（CRUD）
 - **功能編號**: `PHOTO-001`
 - **模組**: `picture`
 - **Actor**: `user` (已認證用戶)
 - **API 路徑**: `/picture/user/photo` ⭐ (統一端點)
 - **驗證方式**: `JWT Bearer Token`
+- **狀態**:  - 所有5個 CRUD 操作均已測試驗證
 - **功能說明**:
   - 用戶上傳自己的個人照片（全身照、頭像等）
   - 支持 JPG、PNG、GIF、WebP 格式
@@ -544,7 +561,7 @@
 ⑥ 返回照片 URL 和用戶信息
 ```
 
-#### 2.4.1 上傳個人照片
+#### 2.3.1 上傳個人照片
 **HTTP 方法**: `POST`
 **API 路徑**: `/picture/user/photo`
 
@@ -581,7 +598,7 @@
   - `503 Service Unavailable`: MinIO 存儲服務不可用
   - `500 Internal Server Error`: 伺服器內部錯誤
 
-#### 2.4.2 查看我的照片列表
+#### 2.3.2 查看我的照片列表
 **HTTP 方法**: `GET`
 **API 路徑**: `/picture/user/photo`
 
@@ -615,13 +632,13 @@
   - `401 Unauthorized`: Token 無效或過期
   - `500 Internal Server Error`: 伺服器內部錯誤
 
-#### 2.4.3 查看單張照片詳情
+#### 2.3.3 查看單張照片詳情
 **HTTP 方法**: `GET`
-**API 路徑**: `/picture/user/photo/<photo_id>/`
+**API 路徑**: `/picture/user/photo/<user_uid>/`
 
 - **路徑參數**:
   ```
-  photo_id: 1
+  user_uid: "550e8400-e29b-41d4-a716-446655440000"
   ```
 
 - **Headers**:
@@ -643,13 +660,13 @@
   - `404 Not Found`: 照片不存在
   - `500 Internal Server Error`: 伺服器內部錯誤
 
-#### 2.4.4 更新照片信息
+#### 2.3.4 更新照片信息
 **HTTP 方法**: `PUT`
-**API 路徑**: `/picture/user/photo/<photo_id>/`
+**API 路徑**: `/picture/user/photo/<user_uid>/`
 
 - **路徑參數**:
   ```
-  photo_id: 1
+  user_uid: "550e8400-e29b-41d4-a716-446655440000"
   ```
 
 - **輸入參數** (JSON):
@@ -683,13 +700,13 @@
   - `404 Not Found`: 照片不存在
   - `415 Unsupported Media Type`: 不支持的檔案類型
 
-#### 2.4.5 刪除照片
+#### 2.3.5 刪除照片
 **HTTP 方法**: `DELETE`
-**API 路徑**: `/picture/user/photo/<photo_id>/`
+**API 路徑**: `/picture/user/photo/<user_uid>/`
 
 - **路徑參數**:
   ```
-  photo_id: 1
+  user_uid: "550e8400-e29b-41d4-a716-446655440000"
   ```
 
 - **Headers**:
@@ -717,9 +734,9 @@
 |----------|---------|------|---------|----------|
 | **POST** | `/picture/user/photo` | ⬆️ 上傳照片 | 認證用戶 | 201 |
 | **GET** | `/picture/user/photo` | 📋 查看我的照片 | 認證用戶 | 200 |
-| **GET** | `/picture/user/photo/<id>/` | 👁️ 查看照片詳情 | 認證用戶 | 200 |
-| **PUT** | `/picture/user/photo/<id>/` | ✏️ 更新照片 | 照片擁有者 | 200 |
-| **DELETE** | `/picture/user/photo/<id>/` | 🗑️ 刪除照片 | 照片擁有者 | 200 |
+| **GET** | `/picture/user/photo/<user_uid>/` | 👁️ 查看照片詳情 | 認證用戶 | 200 |
+| **PUT** | `/picture/user/photo/<user_uid>/` | ✏️ 更新照片 | 照片擁有者 | 200 |
+| **DELETE** | `/picture/user/photo/<user_uid>/` | 🗑️ 刪除照片 | 照片擁有者 | 200 |
 
 **✅ 確認：統一端點 `/picture/user/photo` 可以完整支持個人照片的 CRUD 操作**
 
@@ -727,154 +744,581 @@
 
 ## 👗 三、穿搭管理模塊
 
-穿搭組合的創建、管理和查看
+穿搭組合的創建、管理、虛擬試衣和收藏
+
+**📌 重要說明**：穿搭管理模塊採用新的 `combine` 應用，支持虛擬試衣和 AI 合成功能。每個穿搭恰好包含 2 件衣服
+
+---
 
 ### 3.1 使用者查看穿搭總覽列表
 - **功能編號**: `OUTFIT-001`
-- **模組**: `picture`
-- **Actor**: `user` (已認證用戶)
+- **模組**: `combine`
+- **Actor**: `user` (任何用戶，認證可選)
 - **HTTP 方法**: `GET`
-- **API 路徑**: `/picture/outfit/`
+- **API 路徑**: `/combine/outfit/`
 - **請求格式**: `application/json`
 - **驗證方式**: `JWT Bearer Token` (可選)
 - **功能說明**:
-  - 顯示系統中所有穿搭組合
-  - 支持按季節、風格、評分篩選
-  - 支持搜索和排序
-- **查詢參數**:
-  ```
-  GET /picture/outfit/?page=1&season=春季&style=休閒&limit=20
-  ```
-- **成功回應 (200 OK)**:
-  ```json
-  {
-    "count": 45,
-    "results": [
-      {
-        "id": 1,
-        "name": "春日休閒風格",
-        "season": "春季",
-        "style": "休閒",
-        "clothes_count": 3,
-        "outfit_image": "http://minio:9000/bucket/outfit_1.png",
-        "rating": 4.5,
-        "creator": "fashion_expert"
-      }
-    ]
-  }
-  ```
+  - 顯示系統中所有已發布的穿搭組合（不含草稿）
+  - 完整的分頁支持
+  - 認證用戶可查看自己的點讚狀態
+
+#### 3.1.1 查詢參數說明
+
+| 參數 | 類型 | 範例 | 說明 |
+|------|------|------|------|
+| `page` | integer | 1 | 頁碼（默認 1） |
+| `limit` | integer | 20 | 每頁數量（默認 20，最多 100） |
+
+#### 3.1.2 查詢示例
+
+```
+GET /combine/outfit/?page=1&limit=20
+```
+
+#### 3.1.3 成功回應 (200 OK)
+
+```json
+{
+  "success": true,
+  "message": "穿搭列表獲取成功",
+  "count": 45,
+  "total_pages": 3,
+  "current_page": 1,
+  "limit": 20,
+  "results": [
+    {
+      "outfit_uid": "550e8400-e29b-41d4-a716-446655440000",
+      "outfit_name": "春日甜美風",
+      "outfit_description": "清新舒適的春季搭配",
+      "preview_image_url": "http://192.168.233.128:9000/outfits/preview_1.png",
+      "created_by_name": "fashion_expert",
+      "clothes_count": 2,
+      "is_liked": false,
+      "is_draft": false,
+      "created_at": "2026-03-20T10:30:45Z",
+      "updated_at": "2026-03-25T14:20:00Z"
+    }
+  ]
+}
+```
+
+#### 3.1.4 失敗回應
+
+- `400 Bad Request`: 查詢參數無效
+- `500 Internal Server Error`: 伺服器內部錯誤
 
 ---
 
 ### 3.2 使用者新增穿搭組合
 - **功能編號**: `OUTFIT-002`
-- **模組**: `picture`
+- **模組**: `combine`
 - **Actor**: `user` (已認證用戶)
 - **HTTP 方法**: `POST`
-- **API 路徑**: `/picture/outfit/`
+- **API 路徑**: `/combine/outfit/`
 - **請求格式**: `application/json`
 - **驗證方式**: `JWT Bearer Token`
 - **功能說明**:
-  - 用戶創建新的穿搭組合
-  - 選擇多件衣服進行組合
-  - 添加穿搭名稱、描述、標籤
-- **輸入參數**:
+  - 用戶建立新的穿搭組合（選擇系統中已存在的 2 件衣服）
+  - 添加穿搭名稱（必填）、描述（可選）
+  - 一個穿搭必須恰好包含 2 件衣服
+  - 支持保存為草稿或直接發布
+
+#### 3.2.1 請求參數 (JSON)
+
+```json
+{
+  "outfit_name": "我的春日穿搭",
+  "outfit_description": "清新舒適的春季搭配",
+  "clothes_ids": [
+    "550e8400-e29b-41d4-a716-446655440010",
+    "550e8400-e29b-41d4-a716-446655440011"
+  ],
+  "preview_image_url": "http://..." (可選),
+  "is_draft": false
+}
+```
+
+#### 3.2.2 參數驗證規則
+
+| 參數 | 類型 | 必填 | 驗證規則 |
+|------|------|------|---------|
+| `outfit_name` | string | ✅ | 1-100 字符 |
+| `outfit_description` | string | ❌ | 最多 500 字符 |
+| `clothes_ids` | array | ✅ | UUID 陣列，**必須恰好 2 件** |
+| `preview_image_url` | string | ❌ | 有效的 URL 格式 |
+| `is_draft` | boolean | ❌ | 默認 false |
+
+#### 3.2.3 Headers
+
+```
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+#### 3.2.4 成功回應 (201 Created)
+
+```json
+{
+  "success": true,
+  "message": "穿搭建立成功",
+  "data": {
+    "outfit_uid": "550e8400-e29b-41d4-a716-446655440100",
+    "outfit_name": "我的春日穿搭",
+    "outfit_description": "清新舒適的春季搭配",
+    "preview_image_url": "http://...",
+    "outfit_clothes": [
+      {
+        "id": 1,
+        "clothes": {
+          "clothes_uid": "550e8400-e29b-41d4-a716-446655440010",
+          "clothes_category": "T-shirt",
+          "clothes_image_url": "http://192.168.233.128:9000/...",
+          "colors": ["pink", "white"],
+          "styles": ["casual", "sweet"]
+        },
+        "position_order": 0
+      },
+      {
+        "id": 2,
+        "clothes": {
+          "clothes_uid": "550e8400-e29b-41d4-a716-446655440011",
+          "clothes_category": "Pants",
+          "clothes_image_url": "http://192.168.233.128:9000/...",
+          "colors": ["white"],
+          "styles": ["casual"]
+        },
+        "position_order": 1
+      }
+    ],
+    "created_by": {
+      "user_uid": "550e8400-e29b-41d4-a716-446655440001",
+      "user_name": "john_doe",
+      "user_image_url": "http://..."
+    },
+    "is_liked": false,
+    "is_draft": false,
+    "created_at": "2026-03-27T12:30:45Z",
+    "updated_at": "2026-03-27T12:30:45Z"
+  }
+}
+```
+
+#### 3.2.5 失敗回應
+
+- `400 Bad Request`: 數據驗證失敗
   ```json
   {
-    "name": "我的春日穿搭",
-    "description": "舒適又時尚的春季搭配",
-    "season": "春季",
-    "style": "休閒",
-    "clothes_ids": [1, 5, 12],
-    "tags": ["春季", "休閒", "甜美"]
+    "success": false,
+    "message": "穿搭數據驗證失敗",
+    "errors": {
+      "clothes_ids": ["穿搭必須恰好包含 2 件衣服"]
+    }
   }
   ```
-- **Headers**:
-  ```
-  Authorization: Bearer <access_token>
-  ```
-- **成功回應 (201 Created)**:
-  ```json
-  {
-    "id": 100,
-    "name": "我的春日穿搭",
-    "season": "春季",
-    "created_by": "user_id",
-    "created_at": "2026-01-22T10:30:45Z",
-    "clothes": [
-      {"id": 1, "name": "藍色短袖T恤"},
-      {"id": 5, "name": "白色長褲"},
-      {"id": 12, "name": "米色外套"}
-    ]
-  }
-  ```
+- `401 Unauthorized`: 未認證
+- `404 Not Found`: 衣服不存在
+- `500 Internal Server Error`: 服務器內部錯誤
 
 ---
 
-### 3.3 使用者儲存當前穿搭
-- **功能編號**: `OUTFIT-003`
-- **模組**: `picture`
-- **Actor**: `user` (已認證用戶)
-- **HTTP 方法**: `POST`
-- **API 路徑**: `/picture/outfit/{outfit_id}/save` 或 `/picture/outfit/save_current`
-- **請求格式**: `application/json`
-- **驗證方式**: `JWT Bearer Token`
-- **功能說明**:
-  - 保存用戶當前正在編輯/試穿的穿搭
-  - 支持將虛擬試衣結果保存為穿搭
-  - 生成穿搭預覽圖
-- **輸入參數**:
-  ```json
-  {
-    "name": "正在試穿的搭配",
-    "clothes_ids": [1, 5, 12],
-    "preview_image": "base64_encoded_image_data or url",
-    "is_draft": false
+### 3.3 虛擬試衣 - 核心功能（OUTFIT-003）
+
+穿搭管理模塊的核心功能：用戶選擇 2 件衣服或已存在的穿搭，與 AI 後端互動進行虛擬試衣合成
+
+#### 3.3.1 虛擬試衣流程説明
+
+⭐ **新工作流（v2.0）**：立即試衣，按需保存
+
+```
+前端用戶流程圖
+══════════════════════════════════════════════════════
+
+Step 1: 選擇穿搭或衣服組合
+   ├─ 方式 A：選擇系統中已存在的穿搭（包含 2 件衣服）
+   └─ 方式 B：手動選擇 2 件衣服組合
+
+Step 2: 發送虛擬試衣請求到後端
+   ├─ POST /combine/virtual-try-on/
+   ├─ 提供：
+   │  ├─ outfit_uid（如果是穿搭）或 clothes_ids（如果是衣服組合，恰好 2 件）
+   │  ├─ photo_uid（可選，用戶照片）
+   │  └─ 如果不提供照片，使用用戶身體測量數據
+   └─ 系統開始 AI 合成處理（後端異步處理）
+
+Step 3: 後端驗證並準備 AI 請求
+   ├─ 驗證衣服數量恰好為 2 件
+   ├─ 驗證用戶信息完整性
+   ├─ 從數據庫獲取用戶身體測量和衣服尺寸數據
+   └─ 標記虛擬試衣狀態為 "processing"
+
+Step 4: 轉發至 AI 後端進行虛擬試衣合成
+   ├─ 後端調用：POST (AI_BACKEND_VIRTUAL_TRY_ON_URL 從 .env 讀取)
+   ├─ 發送 multipart/form-data：
+   │  ├─ files[model_image]：模特照片（單張）
+   │  ├─ files[garment_images]：2 件衣服圖片
+   │  ├─ data[model_info]：JSON（用戶身體測量數據）
+   │  └─ data[garments]：JSON（衣服信息）
+   └─ 超時時間：120 秒
+
+Step 5: AI 後端返回虛擬試衣結果
+   ├─ 返回格式：multipart/mixed
+   ├─ 成功 (200 OK)：JSON 元數據 + PNG 二進位圖片
+   └─ 失敗：返回錯誤代碼
+
+Step 6: 後端處理 AI 結果並返回
+   ├─ 解析 AI multipart 響應
+   ├─ 將合成圖片保存到 MinIO
+   ├─ 生成公開訪問 URL
+   ├─ 更新虛擬試衣記錄（狀態 → "completed"）✅ 虛擬試衣立即完成
+   └─ 返回試衣結果給前端
+
+Step 7: 前端展示結果
+   ├─ 展示合成後的虛擬試衣圖片
+   ├─ 用戶可以：
+   │  ├─ ✅ 保存為穿搭：調用 save-as-outfit endpoint
+   │  ├─ ❌ 不保存：忽略此結果
+   │  └─ 📚 查看歷史：GET /combine/virtual-try-on/my
+   └─ 虛擬試衣記錄永久保存供用戶參考
+
+Step 8: 用戶決定保存時
+   ├─ 如果喜歡，調用：
+   │  ├─ POST /combine/virtual-try-on/{try_on_uid}/save-as-outfit
+   │  ├─ 提供：outfit_name（必填） 和 outfit_description（可選）
+   │  ├─ 後端建立 Outfit 記錄，FK 指向此 VirtualTryOn
+   │  ├─ 複製衣服組合到 OutfitClothes
+   │  └─ 返回完整的穿搭詳情
+   └─ 如無需保存：虛擬試衣記錄仍保留在歷史中
+
+**📊 關鍵變化**：
+- VirtualTryOn = 虛擬試衣歷史記錄（永久保存）
+- Outfit = 用戶的穿搭設計（可選，來自滿意的虛擬試衣）
+- Outfit.virtual_try_on FK = 追溯此穿搭來自哪個虛擬試衣
+- 一次虛擬試衣可生成 0 或 1 個 Outfit
+- 用戶可瀏覽所有試衣歷史，按需保存喜歡的設計
+```
+
+#### 3.3.2 發起虛擬試衣請求
+
+**功能編號**: `OUTFIT-003-01`  
+**HTTP 方法**: `POST`  
+**API 路徑**: `/combine/virtual-try-on/`
+
+**請求參數 (JSON)**：
+
+```json
+{
+  "outfit_uid": "550e8400-e29b-41d4-a716-446655440000",  // 可選：要試穿的穿搭 UUID
+  "clothes_ids": [
+    "550e8400-e29b-41d4-a716-446655440010",
+    "550e8400-e29b-41d4-a716-446655440011"
+  ],  // 或者直接提供衣服 UUID 列表（恰好 2 件）
+  "photo_uid": "550e8400-e29b-41d4-a716-446655440050"  // 可選：模特照片 UUID
+}
+```
+
+**參數說明**：
+- `outfit_uid` 和 `clothes_ids` 至少提供一個
+  - 如果提供 `outfit_uid`，系統會使用該穿搭的 2 件衣服
+  - 如果提供 `clothes_ids`，必須恰好包含 2 件衣服 UUID
+- `photo_uid` 可選：使用指定照片作為模特照片
+
+**Headers**：
+```
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+**成功回應 (200 OK)**：
+
+```json
+{
+  "success": true,
+  "message": "虛擬試衣完成，請確認是否保存",
+  "try_on_data": {
+    "try_on_uid": "550e8400-e29b-41d4-a716-446655440200",
+    "status": "completed",
+    "result_image_url": "http://192.168.233.128:9000/virtual-try-on/try_on_550e8400.png",
+    "clothes_count": 2,
+    "ai_response": {
+      "code": 200,
+      "message": "200",
+      "data": {
+        "file_name": "try_on_outfit_20260328.png",
+        "file_format": "PNG",
+        "items_processed": 2
+      }
+    }
   }
-  ```
-- **Headers**:
-  ```
-  Authorization: Bearer <access_token>
-  ```
-- **成功回應 (201 Created)**:
-  ```json
-  {
-    "id": 101,
-    "name": "正在試穿的搭配",
-    "status": "saved",
-    "preview_url": "http://minio:9000/bucket/outfit_preview.png",
-    "saved_at": "2026-01-22T10:35:20Z"
+}
+```
+
+**失敗回應**：
+
+- `400 Bad Request`: 請求參數驗證失敗（如衣服數量不是 2 件）
+- `401 Unauthorized`: 未認證
+- `404 Not Found`: 衣服或照片不存在
+- `503 Service Unavailable`: AI 後端服務不可用
+- `504 Gateway Timeout`: AI 處理逾時（超過 120 秒）
+- `500 Internal Server Error`: 服務器內部錯誤
+
+#### 3.3.3 將虛擬試衣結果保存為穿搭
+
+**功能編號**: `OUTFIT-003-02`  
+**HTTP 方法**: `POST`  
+**API 路徑**: `/combine/virtual-try-on/<try_on_uid>/save-as-outfit`
+
+**請求參數 (JSON)**：
+
+```json
+{
+  "outfit_name": "我喜歡的虛擬試衣結果無敵組合",
+  "outfit_description": "通過虛擬試衣確認的完美搭配"
+}
+```
+
+**參數說明**：
+- `outfit_name`（必填）：穿搭名稱，1-100 字符
+- `outfit_description`（可選）：穿搭描述，最多 500 字符
+
+**Headers**：
+```
+Authorization: Bearer <access_token>
+Content-Type: application/json
+```
+
+**成功回應 (201 Created)**：
+
+```json
+{
+  "success": true,
+  "message": "虛擬試衣已保存為穿搭",
+  "data": {
+    "outfit_uid": "550e8400-e29b-41d4-a716-446655440100",
+    "outfit_name": "我喜歡的虛擬試衣結果無敵組合",
+    "outfit_description": "通過虛擬試衣確認的完美搭配",
+    "preview_image_url": "http://192.168.233.128:9000/virtual-try-on/try_on_550e8400.png",
+    "virtual_try_on_uid": "550e8400-e29b-41d4-a716-446655440200",
+    "outfit_clothes": [
+      {
+        "id": 1,
+        "clothes": {
+          "clothes_uid": "550e8400-e29b-41d4-a716-446655440010",
+          "clothes_category": "Shirt",
+          "clothes_image_url": "http://192.168.233.128:9000/...",
+          "colors": ["pink", "white"],
+          "styles": ["casual", "sweet"]
+        },
+        "position_order": 0
+      },
+      {
+        "id": 2,
+        "clothes": {
+          "clothes_uid": "550e8400-e29b-41d4-a716-446655440011",
+          "clothes_category": "Pants",
+          "clothes_image_url": "http://192.168.233.128:9000/...",
+          "colors": ["white"],
+          "styles": ["casual"]
+        },
+        "position_order": 1
+      }
+    ],
+    "created_by": {
+      "user_uid": "550e8400-e29b-41d4-a716-446655440001",
+      "user_name": "john_doe",
+      "user_image_url": "http://..."
+    },
+    "is_liked": false,
+    "is_draft": false,
+    "created_at": "2026-03-28T10:35:00Z",
+    "updated_at": "2026-03-28T10:35:00Z"
   }
-  ```
+}
+```
+
+**失敗回應**：
+- `400 Bad Request`: 參數驗證失敗
+- `401 Unauthorized`: 未認證
+- `404 Not Found`: 虛擬試衣不存在
+- `500 Internal Server Error`: 伺服器內部錯誤
+
+#### 3.3.4 查看虛擬試衣歷史
+
+**功能編號**: `OUTFIT-003-03`  
+**HTTP 方法**: `GET`  
+**API 路徑**: `/combine/virtual-try-on/my`
+
+**查詢參數**：
+```
+page: 1 (分頁頁數)
+limit: 20 (每頁數量)
+status: "completed" | "processing" (可選過濾)
+```
+
+**Headers**：
+```
+Authorization: Bearer <access_token>
+```
+
+**成功回應 (200 OK)**：
+
+```json
+{
+  "success": true,
+  "message": "虛擬試衣歷史獲取成功",
+  "count": 12,
+  "total_pages": 1,
+  "current_page": 1,
+  "limit": 20,
+  "results": [
+    {
+      "try_on_uid": "550e8400-e29b-41d4-a716-446655440200",
+      "status": "completed",
+      "result_image_url": "http://192.168.233.128:9000/virtual-try-on/try_on_550e8400.png",
+      "clothes_count": 2,
+      "clothes_list": [
+        {
+          "clothes_uid": "550e8400-e29b-41d4-a716-446655440010",
+          "clothes_category": "Shirt",
+          "colors": ["pink"]
+        },
+        {
+          "clothes_uid": "550e8400-e29b-41d4-a716-446655440011",
+          "clothes_category": "Pants",
+          "colors": ["white"]
+        }
+      ],
+      "saved_as_outfit": {
+        "outfit_uid": "550e8400-e29b-41d4-a716-446655440100",
+        "outfit_name": "我的無敵組合"
+      },
+      "created_at": "2026-03-28T10:30:00Z",
+      "ai_processed_at": "2026-03-28T10:31:30Z",
+      "confirmed_at": "2026-03-28T10:35:00Z"
+    }
+  ]
+}
+```
+
+**失敗回應**：
+- `401 Unauthorized`: 未認證
+- `500 Internal Server Error`: 伺服器內部錯誤
 
 ---
 
-### 3.4 使用者與各穿搭互動
-- **功能編號**: `OUTFIT-004`
-- **模組**: `picture`
-- **Actor**: `user` (已認證用戶)
-- **HTTP 方法**: `POST / DELETE`
-- **API 路徑**: `/picture/outfit/{outfit_id}/like` 或 `/picture/outfit/{outfit_id}/unlike`
-- **請求格式**: `application/json`
-- **驗證方式**: `JWT Bearer Token`
-- **功能說明**:
-  - 用戶可以喜歡或取消喜歡穿搭
-  - 喜歡的穿搭會顯示在收藏列表
-  - 支持評分和評論
-- **Headers**:
-  ```
-  Authorization: Bearer <access_token>
-  ```
-- **成功回應 (200 OK)**:
-  ```json
-  {
-    "id": 100,
-    "name": "春日休閒風格",
-    "is_liked": true,
-    "like_count": 256,
-    "current_rating": 4.5
+### 3.4 穿搭詳情和基本 CRUD 操作
+
+#### 3.4.1 查看穿搭詳情
+
+**HTTP 方法**: `GET`  
+**API 路徑**: `/combine/outfit/<outfit_uid>/`
+
+**成功回應 (200 OK)**：
+
+```json
+{
+  "success": true,
+  "message": "穿搭詳情獲取成功",
+  "data": {
+    "outfit_uid": "550e8400-e29b-41d4-a716-446655440000",
+    "outfit_name": "春日甜美風",
+    "outfit_description": "清新舒適的春季搭配",
+    "preview_image_url": "http://...",
+    "outfit_clothes": [
+      {
+        "id": 1,
+        "clothes": {...},
+        "position_order": 0
+      },
+      {
+        "id": 2,
+        "clothes": {...},
+        "position_order": 1
+      }
+    ],
+    "created_by": {
+      "user_uid": "550e8400-e29b-41d4-a716-446655440001",
+      "user_name": "fashion_expert",
+      "user_image_url": "..."
+    },
+    "is_liked": false,
+    "is_draft": false,
+    "created_at": "2026-03-20T10:30:45Z",
+    "updated_at": "2026-03-25T14:20:00Z"
   }
-  ```
+}
+```
+
+#### 3.4.2 刪除穿搭
+
+**HTTP 方法**: `DELETE`  
+**API 路徑**: `/combine/outfit/<outfit_uid>/`  
+**權限**: 穿搭擁有者或管理員
+
+**成功回應 (200 OK)**：
+
+```json
+{
+  "success": true,
+  "message": "穿搭「春日甜美風」已刪除"
+}
+```
+
+---
+
+### 3.5 穿搭互動功能（OUTFIT-004）
+
+#### 3.5.1 標記/取消標記為喜歡（收藏）
+
+**功能編號**: `OUTFIT-004-01`  
+**HTTP 方法**: `PATCH`  
+**API 路徑**: `/combine/outfit/<outfit_uid>/favorite`  
+**認證**: 必須
+
+**請求參數 (JSON)**：
+
+```json
+{
+  "is_liked": true  // true：喜歡；false：取消喜歡
+}
+```
+
+**成功回應 (200 OK)**：
+
+```json
+{
+  "success": true,
+  "message": "已收藏此穿搭",
+  "is_liked": true
+}
+```
+
+或取消喜歡時：
+
+```json
+{
+  "success": true,
+  "message": "已取消收藏",
+  "is_liked": false
+}
+```
+
+---
+
+### 3.6 穿搭管理模塊 API 快速參考表
+
+| 功能 | HTTP 方法 | API 路徑 | 認證 | 返回狀態碼 |
+|------|----------|---------|------|----------|
+| **OUTFIT-001** 查看穿搭列表 | GET | `/combine/outfit/` | 可選 | 200 |
+| **OUTFIT-002** 新增穿搭（2 件衣服） | POST | `/combine/outfit/` | 必須 | 201 |
+| 查看穿搭詳情 | GET | `/combine/outfit/<uid>/` | 可選 | 200 |
+| 刪除穿搭 | DELETE | `/combine/outfit/<uid>/` | 必須 | 200 |
+| **OUTFIT-003-01** 發起虛擬試衣 | POST | `/combine/virtual-try-on/` | 必須 | 200 |
+| **OUTFIT-003-02** 保存為穿搭 | POST | `/combine/virtual-try-on/<uid>/save-as-outfit` | 必須 | 201 |
+| **OUTFIT-003-03** 查看試衣歷史 | GET | `/combine/virtual-try-on/my` | 必須 | 200 |
+| **OUTFIT-004-01** 標記喜歡 | PATCH | `/combine/outfit/<uid>/favorite` | 必須 | 200 |
+| 查看我的穿搭 | GET | `/combine/outfit/my` | 必須 | 200 |
+| 查看我的收藏 | GET | `/combine/outfit/my/favorites` | 必須 | 200 |
 
 ---
 
@@ -1023,6 +1467,8 @@ AI 相關的智能功能
 
 ## 📊 功能矩陣表
 
+### 第一部分：用戶賬戶和衣服管理
+
 | # | 功能名稱 | 模組 | Actor | HTTP 方法 | 優先級 | 狀態 | API 端點 |
 |---|---------|------|-------|----------|--------|------|---------|
 | 1 | 使用者註冊 | accounts | user | POST | ⭐⭐⭐ | ✅ | `/account/user/register` |
@@ -1032,19 +1478,42 @@ AI 相關的智能功能
 | 5 | 上傳模特基本資料 | accounts | user | POST | ⭐⭐⭐ | 🔄 | `/account/user/user_info` |
 | 6 | 設定衣服資料 | picture | admin | POST/PUT | ⭐⭐⭐ | ✅ | `/picture/clothes/` |
 | 7 | 新增衣服（上傳圖片 + AI 處理） | picture | user | POST | ⭐⭐⭐ | ✅ | `/picture/clothes/` |
-| 8 | 查看衣服列表 | picture | user | GET | ⭐⭐⭐ | ✅ | `/picture/clothes/my` |
-| 9 | 查看喜歡的衣服 | picture | user | GET | ⭐⭐ | ✅ | `/picture/clothes/favorites` |
-| 10 | 上傳個人照片 | picture | user | POST | ⭐⭐⭐ | ✅ | `/picture/user/photo` |
-| 11 | 查看穿搭總覽列表 | picture | user | GET | ⭐⭐⭐ | ⏳ | `/picture/outfit/` |
-| 12 | 新增穿搭組合 | picture | user | POST | ⭐⭐⭐ | ⏳ | `/picture/outfit/` |
-| 13 | 儲存當前穿搭 | picture | user | POST | ⭐⭐⭐ | ⏳ | `/picture/outfit/save_current` |
-| 14 | 上傳圖片 (通用) | picture | user | POST | ⭐⭐ | ⏳ | `/picture/upload/` |
-| 15 | AI 文字對話 | picture/ai | user | POST | ⭐⭐ | 🔄 | `/ai/chat` |
+| 8 | 查看喜歡的衣服 | picture | user | GET | ⭐⭐ | ✅ | `/picture/clothes/favorites` |
+| 9 | 上傳個人照片 | picture | user | POST | ⭐⭐⭐ | ✅ | `/picture/user/photo` |
+
+### 第二部分：穿搭管理和虛擬試衣（新增 combine 應用）
+
+| # | 功能名稱 | 模組 | Actor | HTTP 方法 | 優先級 | 狀態 | API 端點 |
+|---|---------|------|-------|----------|--------|------|---------|
+| 10 | **OUTFIT-001** 查看穿搭列表 | combine | user | GET | ⭐⭐⭐ | ✅ 新增 | `/combine/outfit/` |
+| 11 | **OUTFIT-002** 新增穿搭組合 | combine | user | POST | ⭐⭐⭐ | ✅ 新增 | `/combine/outfit/create` |
+| 12 | 查看穿搭詳情 | combine | user | GET | ⭐⭐⭐ | ✅ 新增 | `/combine/outfit/<uid>/` |
+| 13 | 編輯穿搭 | combine | user | PUT | ⭐⭐ | ✅ 新增 | `/combine/outfit/<uid>/update` |
+| 14 | 刪除穿搭 | combine | user | DELETE | ⭐⭐ | ✅ 新增 | `/combine/outfit/<uid>/delete` |
+| 15 | **OUTFIT-003-01** 發起虛擬試衣 | combine | user | POST | ⭐⭐⭐ | ✅ 新增 | `/combine/virtual-try-on/` |
+| 16 | **OUTFIT-003-02** 確認保存虛擬試衣 | combine | user | POST | ⭐⭐⭐ | ✅ 新增 | `/combine/virtual-try-on/<uid>/confirm` |
+| 17 | **OUTFIT-003-03** 拒絕虛擬試衣 | combine | user | POST | ⭐⭐ | ✅ 新增 | `/combine/virtual-try-on/<uid>/reject` |
+| 18 | **OUTFIT-004-01** 標記穿搭為喜歡 | combine | user | PATCH | ⭐⭐⭐ | ✅ 新增 | `/combine/outfit/<uid>/favorite` |
+| 19 | **OUTFIT-004-02** 穿搭評分和評論 | combine | user | POST | ⭐⭐⭐ | ✅ 新增 | `/combine/outfit/<uid>/rating` |
+| 20 | 查看我的穿搭 | combine | user | GET | ⭐⭐⭐ | ✅ 新增 | `/combine/outfit/my` |
+| 21 | 查看我的收藏 | combine | user | GET | ⭐⭐⭐ | ✅ 新增 | `/combine/outfit/my/favorites` |
+
+### 第三部分：其他功能
+
+| # | 功能名稱 | 模組 | Actor | HTTP 方法 | 優先級 | 狀態 | API 端點 |
+|---|---------|------|-------|----------|--------|------|---------|
+| 22 | 上傳圖片 (通用) | picture | user | POST | ⭐⭐ | ⏳ | `/picture/upload/` |
+| 23 | AI 文字對話 | picture/ai | user | POST | ⭐⭐ | 🔄 | `/ai/chat` |
 
 **狀態說明:**
-- ✅ 已完成
+- ✅ 已完成（✅ 新增 = 新建立的功能）
 - 🔄 進行中
 - ⏳ 計劃中
+
+**優先級說明:**
+- ⭐⭐⭐ P0 - 核心功能，需優先完成
+- ⭐⭐ P1 - 重要功能，需完成
+- ⭐ P2 - 增強功能，可延後
 
 ---
 
@@ -1062,16 +1531,36 @@ AI 相關的智能功能
    ├─ 上傳身體測量數據 (user_info) 🔄
    └─ 上傳模特照片 (user_picture) ✅
 
-3. 瀏覽衣服
+3. 瀏覽和上傳衣服
    ├─ 查看衣服列表 (clothes list) ⏳
-   ├─ 查看衣服詳情
+   ├─ 上傳衣服圖片 (upload_image) ✅
+   │  └─ 調用 AI 去背和分類
    └─ 標記喜歡的衣服 (favorites) ✅
 
-4. 虛擬試衣
-   ├─ 上傳衣服圖片 (upload_image) ✅
-   │  └─ 調用 AI 去背
-   ├─ 組合穿搭 (create outfit) ⏳
-   └─ 儲存穿搭 (save outfit) ⏳
+4. 穿搭管理 ✨ 新增（combine 應用）
+   ├─ 查看穿搭列表 (OUTFIT-001) ✅
+   ├─ 新增穿搭組合 (OUTFIT-002) ✅
+   │  ├─ 手動選擇衣服進行組合
+   │  └─ 保存為草稿或發布
+   │
+   ├─ 虛擬試衣 (OUTFIT-003) ✅ 核心功能！
+   │  ├─ POST /combine/virtual-try-on/
+   │  ├─ 選擇穿搭或衣服組合
+   │  ├─ AI 合成試衣結果圖
+   │  └─ 流程：選擇 → AI 合成 → 確認/拒絕
+   │
+   ├─ 確認保存虛擬試衣 (OUTFIT-003-02) ✅
+   │  └─ 虛擬試衣結果 → 穿搭數據庫
+   │
+   ├─ 穿搭互動 (OUTFIT-004) ✅
+   │  ├─ 標記喜歡（OUTFIT-004-01）
+   │  ├─ 評分評論（OUTFIT-004-02）
+   │  └─ 查看收藏列表
+   │
+   └─ 穿搭 CRUD
+      ├─ 查看我的穿搭
+      ├─ 編輯穿搭
+      └─ 刪除穿搭
 
 5. AI 諮詢
    ├─ 文字對話 (AI chat) 🔄
@@ -1079,7 +1568,7 @@ AI 相關的智能功能
    └─ 推薦衣服
 
 6. 查看和管理
-   ├─ 查看穿搭列表 (outfit list) ⏳
+   ├─ 查看穿搭列表 (outfit list) ✅
    ├─ 查看收藏列表 (favorites) ✅
    └─ 編輯和刪除
 
@@ -1087,14 +1576,231 @@ AI 相關的智能功能
    └─ 登出系統 (logout) ✅
 ```
 
-### 管理員衣服管理流程 ✨ 新增
+### 虛擬試衣完整流程圖 ✨ 新增功能詳解
+
+```
+【使用者虛擬試衣流程】
+════════════════════════════════════════════════════════════════
+
+1️⃣ 前端：選擇穿搭或衣服
+   ├─ 方式 A：從穿搭列表選擇一個穿搭
+   ├─ 方式 B：手動選擇多件衣服（T-shirt、褲子等）
+   └─ （可選）選擇模特照片，或使用默認身體數據
+
+2️⃣ 前端：發送虛擬試衣請求
+   └─ POST /combine/virtual-try-on/
+      Headers: Authorization: Bearer <access_token>
+      Body: {
+        "outfit_uid": "...",  // 或 clothes_ids
+        "clothes_ids": ["uuid1", "uuid2"],
+        "photo_uid": "..." (可選)
+      }
+
+3️⃣ 後端：驗證並準備 AI 請求
+   ├─ 驗證用戶、衣服、照片數據
+   ├─ 從數據庫獲取：
+   │  ├─ 用戶身體測量數據
+   │  │  ├─ user_height: 175 cm
+   │  │  ├─ user_weight: 70 kg
+   │  │  ├─ user_shoulder_width: 42.5 cm
+   │  │  ├─ user_arm_length: 60 cm
+   │  │  ├─ user_waistline: 80 cm
+   │  │  └─ user_leg_length: 100 cm
+   │  ├─ 衣服尺寸數據
+   │  │  └─ clothes_arm_length, clothes_shoulder_width 等
+   │  └─ 衣服圖片和模特照片
+   │
+   ├─ 創建虛擬試衣記錄（VirtualTryOn）
+   └─ 狀態 → "processing"
+
+4️⃣ 後端：轉發至 AI 後端
+   └─ POST http://192.168.233.128:8002/virtual_try_on/clothes/combine
+      Content-Type: multipart/form-data
+      
+      files:
+        - model_image: <二進位模特照片>
+        - garment_images: [<圖片1>, <圖片2>, ...]
+      
+      data:
+        - model_info: {
+            "user_height": 175.0,
+            "user_weight": 70,
+            "user_shoulder_width": 42.5,
+            "user_arm_length": 60,
+            "user_waistline": 80,
+            "user_leg_length": 100
+          }
+        - garments: [
+            {
+              "clothes_category": "clothing",
+              "garment_info": {
+                "clothes_arm_length": 68.0,
+                "clothes_shoulder_width": 48.0
+              }
+            },
+            {
+              "clothes_category": "bottom",
+              "garment_info": {
+                "clothes_leg_length": 100.0,
+                "clothes_waistline": 100.0
+              }
+            }
+          ]
+
+5️⃣ AI 後端：虛擬試衣合成
+   ├─ 接收模特照片和衣服圖片
+   ├─ 使用深度學習模型：
+   │  ├─ 衣服檢測和分割
+   │  ├─ 模特姿勢估計
+   │  ├─ 根據身體尺寸調整衣服大小
+   │  └─ 將衣服"穿"到模特身上
+   ├─ 產生合成圖片（PNG 格式）
+   └─ 返回 multipart/mixed 響應
+
+6️⃣ AI 後端：返回結果
+   └─ HTTP/1.1 200 OK
+      Content-Type: multipart/mixed; boundary=frame_boundary
+      
+      --frame_boundary
+      Content-Type: application/json
+      
+      {
+        "code": 200,
+        "message": "200",
+        "data": {
+          "file_name": "try_on_outfit_20260328.png",
+          "file_format": "PNG",
+          "items_processed": 2  // 成功處理了 2 件衣服
+        }
+      }
+      --frame_boundary
+      Content-Type: image/png
+      Content-Disposition: attachment; filename="try_on_outfit_20260328.png"
+      
+      <PNG 圖片二進位數據>
+      --frame_boundary--
+
+7️⃣ 後端：處理 AI 結果
+   ├─ 解析 multipart/mixed 響應
+   ├─ 提取 JSON 元數據和 PNG 圖片
+   ├─ 上傳合成圖片到 MinIO
+   ├─ 生成公開 URL：
+   │  http://192.168.233.128:9000/virtual-try-on/try_on_<uuid>.png
+   │
+   ├─ 更新虛擬試衣記錄：
+   │  ├─ status → "completed"
+   │  ├─ result_image_url → MinIO URL
+   │  ├─ result_file_name → "try_on_outfit_20260328.png"
+   │  ├─ ai_response_data → JSON 元數據
+   │  └─ ai_processed_at → 當前時間
+   │
+   └─ 立即返回結果給前端
+
+8️⃣ 後端：返回虛擬試衣結果
+   └─ HTTP/1.1 200 OK
+      {
+        "success": true,
+        "message": "虛擬試衣完成，請確認是否保存",
+        "try_on_data": {
+          "try_on_uid": "550e8400-...",
+          "status": "completed",
+          "result_image_url": "http://192.168.233.128:9000/virtual-try-on/try_on_550e8400.png",
+          "clothes_count": 2,
+          "ai_response": {
+            "code": 200,
+            "message": "200",
+            "data": {
+              "file_name": "try_on_outfit_20260328.png",
+              "file_format": "PNG",
+              "items_processed": 2
+            }
+          }
+        }
+      }
+
+9️⃣ 前端：展示試衣結果
+   ├─ 顯示合成後的虛擬試衣圖片
+   ├─ 允許用戶：
+   │  ├─ ✅ 點擊「喜歡」→ 確認保存
+   │  └─ ❌ 點擊「不喜歡」→ 拒絕並結束
+   └─ 如喜歡，用戶可輸入：
+      ├─ 穿搭名稱
+      ├─ 穿搭描述
+      ├─ 季節
+      └─ 風格
+
+🔟 前端：用戶確認（喜歡）
+   └─ POST /combine/virtual-try-on/<try_on_uid>/confirm
+      Headers: Authorization: Bearer <access_token>
+      Body: {
+        "outfit_name": "我的春日試衣結果",
+        "outfit_description": "通過虛擬試衣確認的完美搭配",
+        "season": "春季",
+        "style": "甜美",
+        "save_as_new": true
+      }
+
+1️⃣1️⃣ 後端：創建新穿搭
+   ├─ 從虛擬試衣記錄建立新 Outfit
+   │  ├─ outfit_name: 用戶輸入
+   │  ├─ outfit_description: 用戶輸入
+   │  ├─ season, style: 用戶選擇
+   │  ├─ preview_image_url: 試衣結果圖
+   │  └─ created_by: 當前用戶
+   │
+   ├─ 添加 OutfitClothes 記錄（關聯衣服）
+   ├─ 更新 VirtualTryOn：
+   │  ├─ status → "accepted"
+   │  ├─ is_confirmed → true
+   │  ├─ saved_outfit → 新建的 Outfit ID
+   │  ├─ confirmed_at → 當前時間
+   │
+   └─ 返回完整穿搭詳情（包含衣服列表）
+
+1️⃣2️⃣ 前端：顯示保存成功
+   └─ 穿搭已入庫，用戶可以：
+      ├─ 查看該穿搭詳情
+      ├─ 分享給其他用戶
+      ├─ 添加到我的收藏
+      ├─ 進行評分
+      └─ 發起新的虛擬試衣
+
+【如果用戶拒絕虛擬試衣結果】
+使用者不喜歡 → POST /combine/virtual-try-on/<uid>/reject
+後端更新 status → "rejected"，流程結束
+虛擬試衣記錄保留用於分析用戶偏好
+
+【狀態轉換圖】
+pending
+   ↓
+processing
+   ↓
+completed
+   ├─ 用戶確認 → accepted → Outfit 已保存
+   └─ 用戶拒絕 → rejected → 流程結束
+   
+error （如果 AI 處理失敗）
+   └─ ai_error_message 記錄詳細錯誤
+```
+
+### 管理員穿搭管理流程 ✨ 新增
 
 ```
 【後台管理員流程】
 1. 管理員登入
    └─ 使用管理員帳號登入 ✅
 
-2. 衣服管理 (CRUD)
+2. 穿搭管理（combine 應用）
+   ├─ 查看所有穿搭列表
+   │  └─ GET /combine/outfit/?limit=100
+   ├─ 查看虛擬試衣記錄
+   │  └─ 分析用戶試衣行為
+   ├─ 刪除不當穿搭
+   │  └─ DELETE /combine/outfit/<uid>/delete
+   └─ 數據管理
+      └─ 統計穿搭、虛擬試衣等使用數據
+
+3. 衣服管理 (CRUD)
    ├─ 新增衣服 (POST /picture/clothes/) ✅
    │  ├─ 設定衣服分類 (category)
    │  ├─ 設定尺寸數據 (arm_length, shoulder_width 等)
@@ -1110,36 +1816,55 @@ AI 相關的智能功能
    └─ 刪除衣服 (DELETE /picture/clothes/{id}/) ✅
       └─ 自動刪除相關顏色和風格
 
-3. 衣服數據檢查
-   └─ 確保衣服數據完整和正確
+4. 數據檢查
+   └─ 確保衣服和穿搭數據完整和正確
 ```
 
 ---
 
 ## 📝 開發優先級建議
 
-### 第一階段（核心功能）- 即時開發
+### 第一階段（核心功能）- ✅ 已完成（包括虛擬試衣）
 1. ✅ 使用者註冊
 2. ✅ 使用者登入
 3. ✅ 使用者登出
 4. ✅ 使用者上傳衣服圖片 + AI 去背
 5. ✅ 使用者上傳模特照片 + AI 去背
+6. ✅ **OUTFIT-001** 查看穿搭列表
+7. ✅ **OUTFIT-002** 新增穿搭組合
+8. ✅ **OUTFIT-003-01** 發起虛擬試衣
+9. ✅ **OUTFIT-003-02** 確認保存虛擬試衣
+10. ✅ **OUTFIT-004-01** 標記穿搭為喜歡
+11. ✅ **OUTFIT-004-02** 穿搭評分評論
 
 ### 第二階段（基礎管理）- 1-2 週
-6. 🔄 上傳模特基本資料（身體數據）
-7. ⏳ 查看衣服總覽列表 (GET `/picture/clothes/`)
-8. ✅ 設定衣服資料（後台管理）[剛完成!]
-9. ✅ 查看收藏列表
+1. 🔄 上傳模特基本資料（身體數據） - `/account/user/user_info`
+2. ⏳ 查看衣服總覽列表 (GET `/picture/clothes/`)
+3. ✅ 設定衣服資料（後台管理）
+4. ✅ 查看收藏列表
 
-### 第三階段（穿搭功能）- 2-4 週
-10. ⏳ 新增穿搭組合
-11. ⏳ 儲存穿搭
-12. ⏳ 查看穿搭列表
+### 第三階段（穿搭進階功能）- 1-2 週
+1. ✅ 編輯穿搭 (PUT `/combine/outfit/<uid>/update`)
+2. ✅ 刪除穿搭 (DELETE `/combine/outfit/<uid>/delete`)
+3. ✅ 查看穿搭詳情 (GET `/combine/outfit/<uid>/`)
+4. ✅ 拒絕虛擬試衣 (POST `/combine/virtual-try-on/<uid>/reject`)
+5. ✅ 查看我的穿搭 (GET `/combine/outfit/my`)
+6. ✅ 查看我的收藏 (GET `/combine/outfit/my/favorites`)
 
-### 第四階段（增強功能）- 4-8 週
-13. 🔄 AI 文字對話
-14. ⏳ 通用圖片上傳
-15. ⏳ 圖片管理功能
+### 第四階段（增強功能）- 2-4 週
+1. 🔄 AI 文字對話 - `/ai/chat`
+2. ⏳ 通用圖片上傳 - `/picture/upload/`
+3. ⏳ 圖片管理功能
+4. ⏳ 穿搭分享功能
+5. ⏳ 虛擬試衣歷史記錄
+
+### 開發框架
+- **框架**: Django + Django REST Framework
+- **數據庫**: PostgreSQL
+- **存儲**: MinIO (兼容 AWS S3 API)
+- **認證**: JWT (JSON Web Token)
+- **AI 集成**: FastAPI 後端服務
+- **虛擬試衣 AI**: 深度學習模型（衣服檢測、姿勢估計、合成）
 
 ---
 
@@ -1153,10 +1878,33 @@ AI 相關的智能功能
 | 登入 | ✅ | ❌ | ✅ |
 | 登出 | ❌ | ✅ | ✅ |
 | 查看衣服列表 | ✅ | ✅ | ✅ |
+| 查看穿搭列表 | ✅ | ✅ | ✅ |
 | 上傳圖片 | ❌ | ✅ | ✅ |
 | 設定衣服資料 | ❌ | ❌ | ✅ |
+| 新增穿搭 | ❌ | ✅ | ✅ |
+| 編輯/刪除穿搭 | ❌ | ⚠️ (自己) | ✅ |
+| 發起虛擬試衣 | ❌ | ✅ | ✅ |
+| 標記喜歡 | ❌ | ✅ | ✅ |
+| 評分評論 | ❌ | ✅ | ✅ |
 | 刪除用戶 | ❌ | ⚠️ (自己) | ✅ |
 | AI 對話 | ❌ | ✅ | ✅ |
+
+### 穿搭模組權限詳解
+
+| 操作 | 權限要求 | 說明 |
+|------|---------|------|
+| GET /combine/outfit/ | 任何人 | 查看所有公開穿搭 |
+| POST /combine/outfit/create | 認證用戶 | 建立新穿搭 |
+| GET /combine/outfit/<uid>/ | 任何人 | 查看穿搭詳情（包含讚數和評分） |
+| PUT /combine/outfit/<uid>/update | 擁有者\|管理員 | 編輯穿搭（只有創建者或管理員） |
+| DELETE /combine/outfit/<uid>/delete | 擁有者\|管理員 | 刪除穿搭 |
+| POST /combine/virtual-try-on/ | 認證用戶 | 發起虛擬試衣 |
+| POST /combine/virtual-try-on/<uid>/confirm | 試衣者 | 確認並保存虛擬試衣結果 |
+| POST /combine/virtual-try-on/<uid>/reject | 試衣者 | 拒絕虛擬試衣結果 |
+| PATCH /combine/outfit/<uid>/favorite | 認證用戶 | 標記喜歡或取消喜歡 |
+| POST /combine/outfit/<uid>/rating | 認證用戶 | 對穿搭進行評分和評論 |
+| GET /combine/outfit/my | 認證用戶 | 查看我建立的穿搭 |
+| GET /combine/outfit/my/favorites | 認證用戶 | 查看我的收藏列表 |
 
 ---
 
@@ -1167,7 +1915,13 @@ AI 相關的智能功能
 - **WebSocket 支持**: 計劃在 v2
 - **向後兼容**: v1 API 不會中斷
 
+### combine 應用 API 前綴
+- **API 路徑**: `/combine/`
+- **主要功能**: 穿搭管理和虛擬試衣
+- **新增日期**: 2026-03-27
+
 ---
 
-> 最後更新：2026-03-23  
-> 下次審查：2026-04-23
+> 最後更新：2026-03-27  
+> 包含內容：虛擬試衣完整功能、穿搭管理模塊、combine 應用架構
+> 下次審查：2026-04-27

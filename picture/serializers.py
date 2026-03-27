@@ -7,7 +7,7 @@ Serializers for Picture/Clothes Management API
 """
 
 from rest_framework import serializers
-from accounts.models import Clothes, Style, Color
+from accounts.models import Clothes, Style, Color, Photo
 
 
 class ColorSerializer(serializers.ModelSerializer):
@@ -182,3 +182,31 @@ class ClothesDetailSerializer(serializers.ModelSerializer):
         """獲取該衣服的所有風格"""
         styles = Style.objects.filter(f_clothes_uid=obj.clothes_uid)
         return StyleSerializer(styles, many=True).data
+
+
+class PhotoSerializer(serializers.ModelSerializer):
+    """
+    用戶照片序列化器
+    用於照片的 CRUD 操作
+    """
+    
+    class Meta:
+        model = Photo
+        fields = [
+            'photo_id',
+            'photo_uid',
+            'photo_url',
+            'photo_filename',
+            'photo_file_size',
+            'photo_content_type',
+            'photo_uploaded_time',
+            'photo_updated_time'
+        ]
+        read_only_fields = [
+            'photo_id',
+            'photo_uid',
+            'photo_url',
+            'photo_file_size',
+            'photo_uploaded_time',
+            'photo_updated_time'
+        ]

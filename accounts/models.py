@@ -164,3 +164,28 @@ class Color(models.Model):
 
     def __str__(self):
         return f"{self.color_name} - {self.color_uid}"
+
+
+class Photo(models.Model):
+    """
+    用戶個人照片表模型
+    存儲用戶上傳的個人照片（全身照、頭像等）
+    支持多張照片，自動關聯到用戶
+    """
+    photo_id = models.AutoField(primary_key=True, db_column='photo_id')
+    photo_uid = models.CharField(max_length=255, unique=True, db_column='photo_uid', default=uuid.uuid4)
+    f_user_uid = models.CharField(max_length=255, db_column='f_user_uid')  # 外鍵關聯用戶
+    photo_url = models.CharField(max_length=500, db_column='photo_url')  # MinIO 圖片 URL
+    photo_filename = models.CharField(max_length=255, db_column='photo_filename')  # 原始檔名
+    photo_file_size = models.IntegerField(default=0, db_column='photo_file_size', help_text='檔案大小(bytes)')
+    photo_content_type = models.CharField(max_length=50, default='image/jpeg', db_column='photo_content_type')
+    photo_uploaded_time = models.DateTimeField(auto_now_add=True, db_column='photo_uploaded_time')
+    photo_updated_time = models.DateTimeField(auto_now=True, db_column='photo_updated_time')
+    
+    class Meta:
+        db_table = 'photo'
+        verbose_name = '用戶照片'
+        verbose_name_plural = '用戶照片'
+    
+    def __str__(self):
+        return f"Photo {self.photo_id} - {self.f_user_uid}"

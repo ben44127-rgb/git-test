@@ -26,10 +26,27 @@ urlpatterns = [
     # GET: /picture/clothes/my
     path('picture/clothes/my', views.user_clothes_list, name='user_clothes_list'),
     
+    # 用戶喜歡的衣服列表
+    # GET: /picture/clothes/favorites
+    path('picture/clothes/favorites', views.favorites_list, name='favorites_list'),
+    
     # ========== 衣服詳情端點 ==========
     # GET: 獲取單個衣服詳情（任何用戶均可）
     # PUT: 更新衣服（衣服擁有者或管理員）
     # DELETE: 刪除衣服（衣服擁有者或管理員）
     path('picture/clothes/<str:clothes_uid>/', views.clothes_detail, name='clothes_detail'),
+    
+    # 標記/取消標記衣服為喜歡
+    # PATCH: /picture/clothes/<clothes_uid>/favorite
+    path('picture/clothes/<str:clothes_uid>/favorite', views.toggle_favorite, name='toggle_favorite'),
+    
+    # ========== 用戶個人照片管理端點 ==========
+    # POST: 上傳個人照片
+    # GET: 獲取用戶的所有照片列表
     path('picture/user/photo', views.upload_user_photo, name='upload_user_photo'),
+    
+    # GET: 獲取單張照片詳情
+    # PUT: 更新照片（替換照片文件）
+    # DELETE: 刪除照片
+    path('picture/user/photo/<str:user_uid>/', views.photo_detail, name='photo_detail'),
 ]
