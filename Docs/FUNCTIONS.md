@@ -2,7 +2,7 @@
 
 > 更新時間: 2026-03-27  
 > 說明: test_project 系統完整功能一覽及詳細說明
-> 最新更新: 重組照片管理模塊 - 整合衣服管理和用戶個人照片上傳功能
+> 最新更新: Feature 2.1 擴展 - 添加衣服尺寸參數支持（袖長、褲長、肩寬、腰圍）
 
 ---
 
@@ -224,42 +224,55 @@
 - **請求格式**: `multipart/form-data`
 - **驗證方式**: `JWT Bearer Token`
 - **功能說明**:
-  - 用戶上傳衣服**圖片** + **基本尺寸信息**
-  - 後端自動轉發給 AI 進行去背處理
+  - 用戶上傳衣服**圖片** + **衣服尺寸信息**
+  - 支持可選的衣服尺寸參數：袖長、褲長、肩寬、腰圍
+  - 後端自動轉發給 AI 進行去背處理，包含尺寸參數
   - AI 自動分析並提取：衣服分類、顏色、風格
   - 處理後的圖片存儲到 MinIO，返回 URL
-  - 將完整信息存儲到數據庫
+  - 將完整信息（包括衣服尺寸）存儲到數據庫
   - 用戶無需手動輸入顏色和風格（由 AI 自動提取）
 
 **流程說明**:
 ```
-① 用戶上傳圖片 + 基本尺寸 (臂長、肩寬、腰圍、腿長)
+① 用戶上傳圖片 + 衣服尺寸 (袖長、褲長、肩寬、腰圍)
     ↓
-② 後端轉發給 AI 後端進行去背處理
+② 後端驗證衣服尺寸參數範圍
     ↓
-③ AI 返回：
+③ 後端轉發給 AI 後端進行去背處理（包含尺寸）
+    ↓
+④ AI 返回：
    - 去背後的圖片
    - 衣服分類（clothes_category）
    - 風格列表（style_name x 3）
    - 顏色列表（color_name x 3）
     ↓
-④ 後端將圖片存儲到 MinIO
+⑤ 後端將圖片存儲到 MinIO
     ↓
-⑤ 將完整數據存儲到 DB：
-   - Clothes 表：基本信息 + 圖片 URL
+⑥ 將完整數據存儲到 DB：
+   - Clothes 表：基本信息 + 圖片 URL + 衣服尺寸
    - Style 表：3 筆風格
    - Color 表：3 筆顏色
     ↓
-⑥ 返回完整的衣服詳情給前端
+⑦ 返回完整的衣服詳情給前端（包含尺寸數據）
 ```
 
 - **輸入參數** (form-data):
   ```
+  // 必填
   image_data: <二進位圖片文件> (必需)
+  
+  // 可選 - 衣服尺寸參數
+  clothes_arm_length: <整數> (0-200 cm，默認 0)       // 衣服袖長
+  clothes_leg_length: <整數> (0-150 cm，默認 0)       // 衣服褲長
+  clothes_shoulder_width: <整數> (0-200 cm，默認 0)   // 衣服肩寬
+  clothes_waistline: <整數> (0-300 cm，默認 0)        // 衣服腰圍
+  
+  // 認證方式
   user_uid: <用戶 UID> (可選，若使用 JWT 可不提供)
   
-  // 注：基本尺寸信息（臂長、肩寬等）通常集成在前端，
-  //    或者在 AI 分析後由系統自動填充默認值
+  // 注：所有衣服尺寸參數都是可選的，不提供時默認為 0
+  //    衣服尺寸數據會被發送給 AI 後端進行智能處理
+  //    衣服尺寸數據會被持久化存儲在數據庫中
   ```
 
 - **Headers**:
@@ -273,10 +286,10 @@
   {
     "success": true,
     "message": "圖片處理和儲存成功",
-    "processed_url": "http://minio.example.com/bucket/processed_image.png",
+    "processed_url": "http://192.168.233.128:9000/processed-images/unique_id_cleaned.png",
     "ai_status": {
       "status_code": 200,
-      "message": "去背成功",
+      "message": "Processing Success",
       "tools_status": {
         "rembg_engine": "success",
         "opencv_masking": "success",
@@ -286,21 +299,51 @@
     "storage_status": {
       "success": true,
       "filename": "unique_id_cleaned_garment.png",
+      "file_name": "cleaned_garment.png",
       "file_format": "PNG",
-      "storage": "minio"
+      "storage": "minio",
+      "bucket": "processed-images",
+      "public_url": "http://192.168.233.128:9000/processed-images/...",
+      "signed_url": "http://192.168.233.128:9000/processed-images/...?X-Amz..."
     },
     "clothes_data": {
       "clothes_uid": "550e8400-e29b-41d4-a716-446655440000",
       "clothes_category": "T-shirt",
       "styles": ["Casual", "Formal", "Streetwear"],
       "colors": ["red", "blue", "green"],
-      "image_url": "http://minio.example.com/..."
+      "image_url": "http://192.168.233.128:9000/processed-images/...",
+      "clothes_measurements": {
+        "arm_length": 65,           // 衣服袖長（cm）
+        "leg_length": 92,           // 衣服褲長（cm）
+        "shoulder_width": 45,       // 衣服肩寬（cm）
+        "waistline": 80             // 衣服腰圍（cm）
+      }
     }
   }
   ```
 
 - **失敗回應**:
-  - `400 Bad Request`: 缺少圖片或檔案驗證失敗
+  - `400 Bad Request`: 缺少圖片、檔案驗證失敗或衣服尺寸參數無效
+    ```json
+    {
+      "success": false,
+      "message": "請上傳圖片檔案（欄位名稱：image_data）"
+    }
+    ```
+    或
+    ```json
+    {
+      "success": false,
+      "message": "衣服尺寸參數必須為整數"
+    }
+    ```
+    或
+    ```json
+    {
+      "success": false,
+      "message": "衣服袖長必須在 0 到 200 cm 之間"
+    }
+    ```
   - `401 Unauthorized`: 未認證或 Token 過期
   - `415 Unsupported Media Type`: 上傳非圖片檔案
   - `422 Unprocessable Entity`: 圖片過於模糊
@@ -318,6 +361,21 @@
 | **DELETE** | `/picture/clothes/<id>/` | 🗑️ 刪除衣服 | 擁有者/管理員 | 200 |
 
 **✅ 確認：統一端點 `/picture/clothes/` 可以完整支持衣服的 CRUD 操作**
+
+**📏 衣服尺寸參數驗證規則**:
+
+| 參數名 | 範圍 | 默認值 | 說明 |
+|-------|------|--------|------|
+| `clothes_arm_length` | 0-200 cm | 0 | 衣服袖長，不能為負數 |
+| `clothes_leg_length` | 0-150 cm | 0 | 衣服褲長，不能為負數 |
+| `clothes_shoulder_width` | 0-200 cm | 0 | 衣服肩寬，不能為負數 |
+| `clothes_waistline` | 0-300 cm | 0 | 衣服腰圍，不能為負數 |
+
+**✅ 驗證流程**:
+1. 將參數轉換為整數，若非整數格式則返回 400 Bad Request
+2. 檢查是否在允許的範圍內，若超出範圍則返回 400 Bad Request
+3. 所有參數都是可選的，可完全不提供或只提供部分參數
+4. 不提供時默認為 0，系統仍然正常處理
 
 ---
 
