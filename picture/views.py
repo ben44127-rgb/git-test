@@ -161,24 +161,33 @@ def upload_and_process(request):
     處理圖片上傳和 AI 去背的主要視圖函數
 
     完整流程：
-    1. 接收前端上傳的圖片（multipart/form-data）
-    2. 將圖片轉發給 AI 後端（virtual_try_on/clothes/remove_bg）
+    1. 接收前端上傳的圖片和衣服尺寸參數（multipart/form-data）
+    2. 將圖片和衣服尺寸參數轉發給 AI 後端（virtual_try_on/clothes/remove_bg）
     3. 解析 AI 返回的 multipart 回應（JSON 元數據 + 去背圖片）
     4. 使用 AI 回傳的 file_name / file_format 將圖片儲存到 MinIO
-    5. 將 clothes_category、style_name（3筆）、color_name（3筆）存入資料庫
+    5. 將 clothes_category、style_name（3筆）、color_name（3筆）和衣服尺寸存入資料庫
     6. 返回完整的狀態資訊給前端
 
     請求方式：POST
     Content-Type: multipart/form-data
-    存取位址：http://localhost:30000/picture/clothes/upload_image
+    存取位址：http://localhost:30000/picture/clothes/
 
     請求參數：
-    - image_data: 圖片檔案（multipart/form-data 格式）
+    - image_data: 圖片檔案（multipart/form-data 格式）必填
+    - clothes_arm_length: 衣服袖長（cm，整數，0-200）可選，默認0
+    - clothes_leg_length: 衣服褲長（cm，整數，0-150）可選，默認0
+    - clothes_shoulder_width: 衣服肩寬（cm，整數，0-200）可選，默認0
+    - clothes_waistline: 衣服腰圍（cm，整數，0-300）可選，默認0
     - user_uid: 用戶 UID（字串，若有 JWT Token 則可省略）
 
     AI 後端位址：http://192.168.233.128:8002/virtual_try_on/clothes/remove_bg
     AI 請求格式：
     - clothes_image: 圖片檔案流
+    - clothes_arm_length: 袖長（整數）
+    - clothes_leg_length: 褲長（整數）
+    - clothes_shoulder_width: 肩寬（整數）
+    - clothes_waistline: 腰圍（整數）
+    - user_uid: 用戶 UID
 
     AI 回應格式（multipart，boundary=bg_removal_boundary）：
     Part 1 - JSON 元數據:
@@ -268,6 +277,70 @@ def upload_and_process(request):
     logger.info(f"👤 用戶 UID：{user_uid}")
 
     # ==========================================
+    # 【步驟 1.6】提取衣服尺寸參數
+    # ==========================================
+    clothes_arm_length = request.POST.get('clothes_arm_length', 0)
+    clothes_leg_length = request.POST.get('clothes_leg_length', 0)
+    clothes_shoulder_width = request.POST.get('clothes_shoulder_width', 0)
+    clothes_waistline = request.POST.get('clothes_waistline', 0)
+
+    # 驗證和轉換為整數
+    try:
+        clothes_arm_length = int(clothes_arm_length) if clothes_arm_length else 0
+        clothes_leg_length = int(clothes_leg_length) if clothes_leg_length else 0
+        clothes_shoulder_width = int(clothes_shoulder_width) if clothes_shoulder_width else 0
+        clothes_waistline = int(clothes_waistline) if clothes_waistline else 0
+    except ValueError as e:
+        logger.error(f"❌ 衣服尺寸參數格式錯誤：{e}")
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "衣服尺寸參數必須為整數"
+            },
+            status=400
+        )
+
+    # 驗證尺寸範圍
+    if clothes_arm_length < 0 or clothes_arm_length > 200:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "衣服袖長必須在 0 到 200 cm 之間"
+            },
+            status=400
+        )
+    if clothes_leg_length < 0 or clothes_leg_length > 150:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "衣服褲長必須在 0 到 150 cm 之間"
+            },
+            status=400
+        )
+    if clothes_shoulder_width < 0 or clothes_shoulder_width > 200:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "衣服肩寬必須在 0 到 200 cm 之間"
+            },
+            status=400
+        )
+    if clothes_waistline < 0 or clothes_waistline > 300:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "衣服腰圍必須在 0 到 300 cm 之間"
+            },
+            status=400
+        )
+
+    logger.info(f"👕 衣服尺寸參數：")
+    logger.info(f"   袖長（arm_length）：{clothes_arm_length} cm")
+    logger.info(f"   褲長（leg_length）：{clothes_leg_length} cm")
+    logger.info(f"   肩寬（shoulder_width）：{clothes_shoulder_width} cm")
+    logger.info(f"   腰圍（waistline）：{clothes_waistline} cm")
+
+    # ==========================================
     # 【步驟 2】讀取圖片資料準備發送給 AI 後端
     # ==========================================
     try:
@@ -291,15 +364,27 @@ def upload_and_process(request):
 
     try:
         # 準備發送給 AI 後端的資料
-        # 只需要 clothes_image（根據新 API 規格）
+        # 包含 clothes_image 和衣服尺寸參數
         files = {
             'clothes_image': (image_file.name, file_bytes, image_file.content_type)
         }
+
+        # 準備 data 字典（衣服尺寸和其他參數）
+        data = {
+            'clothes_arm_length': clothes_arm_length,
+            'clothes_leg_length': clothes_leg_length,
+            'clothes_shoulder_width': clothes_shoulder_width,
+            'clothes_waistline': clothes_waistline,
+            'user_uid': user_uid,
+        }
+
+        logger.info(f"📤 發送給 AI 後端的參數：{json.dumps(data, ensure_ascii=False)}")
 
         # 發送 POST 請求給 AI 後端
         ai_response = requests.post(
             settings.AI_BACKEND_URL,
             files=files,
+            data=data,
             timeout=120  # 120秒逾時（AI 處理可能較耗時）
         )
 
@@ -627,14 +712,19 @@ def upload_and_process(request):
     try:
         clothes_uid = str(uuid.uuid4())
 
-        # 建立 Clothes 記錄
+        # 建立 Clothes 記錄（包含衣服尺寸）
         clothes = Clothes.objects.create(
             f_user_uid=user_uid,
             clothes_uid=clothes_uid,
             clothes_category=clothes_category,
             clothes_image_url=image_url,
+            clothes_arm_length=clothes_arm_length,
+            clothes_leg_length=clothes_leg_length,
+            clothes_shoulder_width=clothes_shoulder_width,
+            clothes_waistline=clothes_waistline,
         )
         logger.info(f"✅ 建立衣服記錄：clothes_uid={clothes_uid}, category={clothes_category}")
+        logger.info(f"   尺寸：袖長={clothes_arm_length}cm, 褲長={clothes_leg_length}cm, 肩寬={clothes_shoulder_width}cm, 腰圍={clothes_waistline}cm")
 
         # 建立 Style 記錄（3筆，每筆鏈結到同一件 clothes）
         created_styles = []
@@ -712,6 +802,12 @@ def upload_and_process(request):
             "styles": created_styles,
             "colors": created_colors,
             "image_url": image_url,
+            "clothes_measurements": {
+                "arm_length": clothes_arm_length,
+                "leg_length": clothes_leg_length,
+                "shoulder_width": clothes_shoulder_width,
+                "waistline": clothes_waistline,
+            }
         }
     }
 
