@@ -301,23 +301,29 @@
     "user_uid": {
       "type": "uuid string",
       "required": false,
-      "description": "用戶唯一標識符（若使用 JWT Bearer Token 可不提供）"
+      "description": "⚠️ 不要提供 - 使用 JWT Bearer Token 時，用戶信息自動從 Token 中提取，無需此參數"
     }
   }
   ```
 
   **📝 參數說明**:
-  - 所有衣服尺寸參數都是 **可選的**，不提供時默認為 0
+  - **必填參數**: `image_data` (衣服圖片文件)
+  - **可選參數**: `clothes_arm_length`, `clothes_leg_length`, `clothes_shoulder_width`, `clothes_waistline` (所有尺寸參數不提供時默認為 0)
+  - **無需提供**: `user_uid` (用戶信息自動從 JWT Token 中提取)
   - 衣服尺寸參數必須是 **非負整數**，超出範圍將返回 400 Bad Request
-  - `image_data` 是 **必填** 參數，缺少此參數將返回 400 Bad Request
   - 衣服尺寸數據會被發送給 AI 後端進行智能處理
   - 衣服尺寸數據會被持久化存儲在數據庫中
 
-- **Headers**:
+- **Headers** 🔐:
   ```
-  Authorization: Bearer <access_token>
+  Authorization: Bearer <access_token>          // ⭐ JWT Token - 必填，用於識別用戶身份
   Content-Type: multipart/form-data
   ```
+  
+  **認證說明**: 使用 JWT Bearer Token 進行身份驗證
+  - 從登入端點獲得的 `access_token`
+  - 後端自動從 Token 中提取用戶信息（user_uid、user_id 等）
+  - **不需要** 在表單參數中提供 `user_uid`
 
 - **成功回應 (201 Created / 200 OK)**:
   ```json
