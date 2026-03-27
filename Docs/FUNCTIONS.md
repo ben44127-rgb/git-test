@@ -257,23 +257,61 @@
 ```
 
 - **輸入參數** (form-data):
+  ```json
+  {
+    "image_data": {
+      "type": "file (binary)",
+      "required": true,
+      "description": "衣服圖片文件（二進位數據）",
+      "accepted_formats": ["JPG", "PNG", "GIF", "WebP"],
+      "max_size": "10MB"
+    },
+    "clothes_arm_length": {
+      "type": "integer",
+      "required": false,
+      "default": 0,
+      "range": [0, 200],
+      "unit": "cm",
+      "description": "衣服袖長（衣服的胳膊長度）"
+    },
+    "clothes_leg_length": {
+      "type": "integer",
+      "required": false,
+      "default": 0,
+      "range": [0, 150],
+      "unit": "cm",
+      "description": "衣服褲長（衣服的褲子長度）"
+    },
+    "clothes_shoulder_width": {
+      "type": "integer",
+      "required": false,
+      "default": 0,
+      "range": [0, 200],
+      "unit": "cm",
+      "description": "衣服肩寬（衣服肩膀的寬度）"
+    },
+    "clothes_waistline": {
+      "type": "integer",
+      "required": false,
+      "default": 0,
+      "range": [0, 300],
+      "unit": "cm",
+      "description": "衣服腰圍（衣服腰部的圓周）"
+    },
+    "user_uid": {
+      "type": "uuid string",
+      "required": false,
+      "description": "用戶唯一標識符（若使用 JWT Bearer Token 可不提供）"
+    }
+  }
   ```
-  // 必填
-  image_data: <二進位圖片文件> (必需)
-  
-  // 可選 - 衣服尺寸參數
-  clothes_arm_length: <整數> (0-200 cm，默認 0)       // 衣服袖長
-  clothes_leg_length: <整數> (0-150 cm，默認 0)       // 衣服褲長
-  clothes_shoulder_width: <整數> (0-200 cm，默認 0)   // 衣服肩寬
-  clothes_waistline: <整數> (0-300 cm，默認 0)        // 衣服腰圍
-  
-  // 認證方式
-  user_uid: <用戶 UID> (可選，若使用 JWT 可不提供)
-  
-  // 注：所有衣服尺寸參數都是可選的，不提供時默認為 0
-  //    衣服尺寸數據會被發送給 AI 後端進行智能處理
-  //    衣服尺寸數據會被持久化存儲在數據庫中
-  ```
+
+  **📝 參數說明**:
+  - 所有衣服尺寸參數都是 **可選的**，不提供時默認為 0
+  - 衣服尺寸參數必須是 **非負整數**，超出範圍將返回 400 Bad Request
+  - `image_data` 是 **必填** 參數，缺少此參數將返回 400 Bad Request
+  - 衣服尺寸數據會被發送給 AI 後端進行智能處理
+  - 衣服尺寸數據會被持久化存儲在數據庫中
 
 - **Headers**:
   ```
