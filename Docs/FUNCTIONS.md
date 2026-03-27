@@ -1,7 +1,8 @@
 # 系統功能文檔
 
-> 更新時間: 2026-03-23  
-> 說明: test_project 系統完整功能清單及詳細說明
+> 更新時間: 2026-03-27  
+> 說明: test_project 系統完整功能一覽及詳細說明
+> 最新更新: 重組照片管理模塊 - 整合衣服管理和用戶個人照片上傳功能
 
 ---
 
@@ -12,9 +13,9 @@
 | 模塊 | 功能數 | 優先級 |
 |------|--------|--------|
 | 🔐 **用戶賬戶管理** | 5 | ⭐⭐⭐ 核心功能 |
-| 👕 **衣服管理** | 4 | ⭐⭐⭐ 核心功能 |
+| � **照片管理** | 5 | ⭐⭐⭐ 核心功能 |
 | 👗 **穿搭管理** | 4 | ⭐⭐⭐ 核心功能 |
-| 📸 **圖片和媒體** | 3 | ⭐⭐⭐ 核心功能 |
+| 🖼️ **圖片和媒體** | 3 | ⭐⭐⭐ 核心功能 |
 | 🤖 **AI 功能** | 1 | ⭐⭐ 進階功能 |
 
 ---
@@ -210,152 +211,175 @@
 
 ---
 
-## 👕 二、衣服管理模塊
+## 📸 二、照片管理模塊
 
-衣服資料的設定、查看和管理
+用戶照片和衣服資料的上傳、查看和管理（包括：衣服圖片、用戶個人照片）
 
-### 2.1 設定衣服資料
+### 2.1 用戶新增衣服（上傳圖片 + AI 處理）
 - **功能編號**: `CLOTHES-001`
-- **模組**: `picture`
-- **Actor**: `admin` (管理員)
-- **HTTP 方法**: `POST` (新增) / `PUT` (更新)
-- **API 路徑**: `/picture/clothes/` (新增) 或 `/picture/clothes/{id}/` (更新)
-- **請求格式**: `application/json`
-- **驗證方式**: `JWT Bearer Token`
-- **功能說明**:
-  - 管理員添加或編輯衣服資料
-  - 包含衣服分類、尺寸數據、圖片 URL、顏色和風格標籤
-  - 支持新增多個顏色和風格
-
-**POST 新增衣服 (201 Created)**:
-- **輸入參數**:
-  ```json
-  {
-    "clothes_category": "上衣",
-    "clothes_arm_length": 60,
-    "clothes_shoulder_width": 45,
-    "clothes_waistline": 80,
-    "clothes_leg_length": 0,
-    "clothes_image_url": "http://minio.example.com/clothes.jpg",
-    "colors": ["藍色", "紅色"],
-    "styles": ["休閒", "正式"]
-  }
-  ```
-- **成功回應**:
-  ```json
-  {
-    "clothes_id": 1,
-    "clothes_uid": "550e8400-e29b-41d4-a716-446655440000",
-    "clothes_category": "上衣",
-    "clothes_arm_length": 60,
-    "clothes_shoulder_width": 45,
-    "clothes_waistline": 80,
-    "clothes_leg_length": 0,
-    "clothes_image_url": "http://minio.example.com/clothes.jpg",
-    "clothes_favorite": false,
-    "clothes_created_time": "2026-03-23T16:00:00Z",
-    "colors": [{"color_id": 1, "color_name": "藍色"}, {"color_id": 2, "color_name": "紅色"}],
-    "styles": [{"style_id": 1, "style_name": "休閒"}, {"style_id": 2, "style_name": "正式"}]
-  }
-  ```
-
-**PUT 更新衣服 (200 OK)**:
-- **路徑**: `/picture/clothes/{id}/`
-- **輸入參數**: 同上
-- **回應**: 同上
-
-- **失敗回應**:
-  - `400 Bad Request`: 數據驗證失敗
-  - `403 Forbidden`: 無管理員權限
-  - `404 Not Found`: 衣服不存在 (PUT 時)
-
----
-
-### 2.2 使用者查看衣服總覽列表
-- **功能編號**: `CLOTHES-002`
-- **模組**: `picture`
-- **Actor**: `user` (已認證用戶)
-- **HTTP 方法**: `GET`
-- **API 路徑**: `/picture/clothes/`
-- **請求格式**: `application/json`
-- **驗證方式**: `JWT Bearer Token` (可選)
-- **功能說明**:
-  - 顯示系統中所有可用的衣服
-  - 支持分頁、篩選
-  - 可按分類篩選
-- **查詢參數**:
-  ```
-  GET /picture/clothes/?page=1&category=上衣&limit=20
-  ```
-- **成功回應 (200 OK)**:
-  ```json
-  {
-    "count": 150,
-    "total_pages": 8,
-    "current_page": 1,
-    "results": [
-      {
-        "id": 1,
-        "name": "藍色短袖T恤",
-        "category": "上衣",
-        "color": "藍色",
-        "thumbnail_url": "http://minio:9000/bucket/clothes_1.png"
-      },
-      {
-        "id": 2,
-        "name": "黑色牛仔褲",
-        "category": "褲子",
-        "color": "黑色",
-        "thumbnail_url": "http://minio:9000/bucket/clothes_2.png"
-      }
-    ]
-  }
-  ```
-
----
-
-### 2.3 使用者新增衣服照片
-- **功能編號**: `CLOTHES-003`
 - **模組**: `picture`
 - **Actor**: `user` (已認證用戶)
 - **HTTP 方法**: `POST`
-- **API 路徑**: `/picture/clothes/upload_image`
+- **API 路徑**: `/picture/clothes/` ⭐ (統一端點)
 - **請求格式**: `multipart/form-data`
 - **驗證方式**: `JWT Bearer Token`
 - **功能說明**:
-  - 用戶上傳衣服照片
-  - 自動調用 AI 進行背景移除
-  - 處理後的圖片存儲到 MinIO
-  - 返回去背後的圖片 URL
-- **輸入參數**:
+  - 用戶上傳衣服**圖片** + **基本尺寸信息**
+  - 後端自動轉發給 AI 進行去背處理
+  - AI 自動分析並提取：衣服分類、顏色、風格
+  - 處理後的圖片存儲到 MinIO，返回 URL
+  - 將完整信息存儲到數據庫
+  - 用戶無需手動輸入顏色和風格（由 AI 自動提取）
+
+**流程說明**:
+```
+① 用戶上傳圖片 + 基本尺寸 (臂長、肩寬、腰圍、腿長)
+    ↓
+② 後端轉發給 AI 後端進行去背處理
+    ↓
+③ AI 返回：
+   - 去背後的圖片
+   - 衣服分類（clothes_category）
+   - 風格列表（style_name x 3）
+   - 顏色列表（color_name x 3）
+    ↓
+④ 後端將圖片存儲到 MinIO
+    ↓
+⑤ 將完整數據存儲到 DB：
+   - Clothes 表：基本信息 + 圖片 URL
+   - Style 表：3 筆風格
+   - Color 表：3 筆顏色
+    ↓
+⑥ 返回完整的衣服詳情給前端
+```
+
+- **輸入參數** (form-data):
   ```
-  image_data: <二進位圖片文件>
-  filename: "clothes_photo.jpg"
+  image_data: <二進位圖片文件> (必需)
+  user_uid: <用戶 UID> (可選，若使用 JWT 可不提供)
+  
+  // 注：基本尺寸信息（臂長、肩寬等）通常集成在前端，
+  //    或者在 AI 分析後由系統自動填充默認值
   ```
+
 - **Headers**:
   ```
   Authorization: Bearer <access_token>
   Content-Type: multipart/form-data
   ```
-- **成功回應 (200 OK)**:
+
+- **成功回應 (201 Created / 200 OK)**:
   ```json
   {
     "success": true,
     "message": "圖片處理和儲存成功",
-    "processed_url": "http://192.168.233.128:9000/bucket/processed_image.png",
+    "processed_url": "http://minio.example.com/bucket/processed_image.png",
     "ai_status": {
       "status_code": 200,
-      "message": "去背成功"
+      "message": "去背成功",
+      "tools_status": {
+        "rembg_engine": "success",
+        "opencv_masking": "success",
+        "gemini_consultant": "success"
+      }
+    },
+    "storage_status": {
+      "success": true,
+      "filename": "unique_id_cleaned_garment.png",
+      "file_format": "PNG",
+      "storage": "minio"
+    },
+    "clothes_data": {
+      "clothes_uid": "550e8400-e29b-41d4-a716-446655440000",
+      "clothes_category": "T-shirt",
+      "styles": ["Casual", "Formal", "Streetwear"],
+      "colors": ["red", "blue", "green"],
+      "image_url": "http://minio.example.com/..."
     }
   }
   ```
+
 - **失敗回應**:
-  - `400 Bad Request`: 檔案驗證失敗
-  - `503 Service Unavailable`: AI 服務不可用
+  - `400 Bad Request`: 缺少圖片或檔案驗證失敗
+  - `401 Unauthorized`: 未認證或 Token 過期
+  - `415 Unsupported Media Type`: 上傳非圖片檔案
+  - `422 Unprocessable Entity`: 圖片過於模糊
+  - `503 Service Unavailable`: AI 服務或存儲服務不可用
+  - `504 Gateway Timeout`: AI 處理逾時（超過 120 秒）
+
+**📊 統一端點 CRUD 操作表** ⭐ 所有衣服操作都經由同一端點：
+
+| HTTP 方法 | API 路徑 | 操作 | 身份要求 | 返回狀態碼 |
+|----------|---------|------|---------|----------|
+| **POST** | `/picture/clothes/` | ✏️ 新增衣服 | 認證用戶 | 201 |
+| **GET** | `/picture/clothes/my` | 📋 查看我的衣服 | 認證用戶 | 200 |
+| **GET** | `/picture/clothes/<id>/` | 👁️ 查看衣服詳情 | 認證用戶 | 200 |
+| **PUT** | `/picture/clothes/<id>/` | ✏️ 更新衣服 | 擁有者/管理員 | 200 |
+| **DELETE** | `/picture/clothes/<id>/` | 🗑️ 刪除衣服 | 擁有者/管理員 | 200 |
+
+**✅ 確認：統一端點 `/picture/clothes/` 可以完整支持衣服的 CRUD 操作**
 
 ---
 
-### 2.4 使用者查看喜歡的衣服/穿搭列表
+### 2.2 用戶查看自己的衣服列表
+- **功能編號**: `CLOTHES-002` ⭐ 更新
+- **模組**: `picture`
+- **Actor**: `user` (已認證用戶) - 蓋里管理員可查看所有
+- **HTTP 方法**: `GET`
+- **API 路徑**: `/picture/clothes/my`
+- **請求格式**: `application/json`
+- **驗證方式**: `JWT Bearer Token`
+- **功能說明**:
+  - 蓋賬獲取當前用戶的衣服列表
+  - 管理員夠實可查看所有衣服
+  - 支持分頁、篩選
+  - 可按分類篩選
+- **查詢參數**:
+  ```
+  page: 1 (分頁頁數)
+  limit: 20 (每頁數量)
+  category: "上衣" (按分類篩選，可選)
+  ```
+- **示例**:
+  ```
+  GET /picture/clothes/my?page=1&limit=20&category=上衣
+  ```
+- **Headers**:
+  ```
+  Authorization: Bearer <access_token>
+  ```
+- **成功回應 (200 OK)**:
+  ```json
+  {
+    "count": 15,
+    "total_pages": 1,
+    "current_page": 1,
+    "results": [
+      {
+        "clothes_id": 1,
+        "clothes_uid": "550e8400-e29b-41d4-a716-446655440000",
+        "clothes_category": "上衣",
+        "clothes_arm_length": 60,
+        "clothes_shoulder_width": 45,
+        "clothes_waistline": 80,
+        "clothes_leg_length": 0,
+        "clothes_image_url": "http://minio.example.com/...",
+        "clothes_favorite": false,
+        "clothes_created_time": "2026-03-27T16:00:00Z",
+        "clothes_updated_time": "2026-03-27T16:00:00Z",
+        "colors": [{"color_id": 1, "color_uid": "...", "color_name": "藍色"}],
+        "styles": [{"style_id": 1, "style_uid": "...", "style_name": "休閒"}]
+      }
+    ]
+  }
+  ```
+- **失敗回應**:
+  - `401 Unauthorized`: 簽證失敗或 Token 過期
+  - `500 Internal Server Error`: 伺服器內部錯誤
+
+---
+
+### 2.3 用戶查看喜歡的衣服/穿搭列表
 - **功能編號**: `CLOTHES-004`
 - **模組**: `picture`
 - **Actor**: `user` (已認證用戶)
@@ -392,6 +416,216 @@
 - **失敗回應**:
   - `401 Unauthorized`: Token 無效或過期
   - `500 Internal Server Error`: 伺服器內部錯誤
+
+---
+
+### 2.4 用戶個人照片管理（CRUD）
+- **功能編號**: `PHOTO-001`
+- **模組**: `picture`
+- **Actor**: `user` (已認證用戶)
+- **API 路徑**: `/picture/user/photo` ⭐ (統一端點)
+- **驗證方式**: `JWT Bearer Token`
+- **功能說明**:
+  - 用戶上傳自己的個人照片（全身照、頭像等）
+  - 支持 JPG、PNG、GIF、WebP 格式
+  - 最大檔案 10MB
+  - 自動存儲到 MinIO
+  - 更新用戶的個人照片 URL
+  - 用於虛擬試衣、個人檔案等場景
+
+**流程說明**:
+```
+① 用戶選擇並上傳照片檔案
+    ↓
+② 後端驗證檔案格式和大小
+    ↓
+③ 上傳到 MinIO 存儲
+    ↓
+④ 生成 MinIO URL
+    ↓
+⑤ 更新用戶 user_image_url 字段
+    ↓
+⑥ 返回照片 URL 和用戶信息
+```
+
+#### 2.4.1 上傳個人照片
+**HTTP 方法**: `POST`
+**API 路徑**: `/picture/user/photo`
+
+- **輸入參數** (form-data):
+  ```
+  photo_file: <二進位圖片檔案> (JPG, PNG, GIF, WebP，最大 10MB)
+  ```
+
+- **Headers**:
+  ```
+  Authorization: Bearer <access_token>
+  Content-Type: multipart/form-data
+  ```
+
+- **成功回應 (201 Created)**:
+  ```json
+  {
+    "success": true,
+    "message": "個人照片上傳成功",
+    "photo_id": 1,
+    "photo_url": "http://minio.example.com/bucket/user_uuid_photo_uuid.png",
+    "user": {
+      "user_uid": "550e8400-e29b-41d4-a716-446655440000",
+      "user_name": "john_doe",
+      "user_image_url": "http://minio.example.com/bucket/user_uuid_photo_uuid.png"
+    }
+  }
+  ```
+
+- **失敗回應**:
+  - `400 Bad Request`: 缺少檔案參數或檔案過大
+  - `401 Unauthorized`: Token 無效或過期
+  - `415 Unsupported Media Type`: 不支持的檔案類型
+  - `503 Service Unavailable`: MinIO 存儲服務不可用
+  - `500 Internal Server Error`: 伺服器內部錯誤
+
+#### 2.4.2 查看我的照片列表
+**HTTP 方法**: `GET`
+**API 路徑**: `/picture/user/photo`
+
+- **查詢參數**:
+  ```
+  page: 1 (分頁頁數)
+  limit: 20 (每頁數量)
+  ```
+
+- **Headers**:
+  ```
+  Authorization: Bearer <access_token>
+  ```
+
+- **成功回應 (200 OK)**:
+  ```json
+  {
+    "count": 5,
+    "total_pages": 1,
+    "results": [
+      {
+        "photo_id": 1,
+        "photo_url": "http://minio.example.com/bucket/photo_1.png",
+        "uploaded_at": "2026-03-27T16:00:00Z"
+      }
+    ]
+  }
+  ```
+
+- **失敗回應**:
+  - `401 Unauthorized`: Token 無效或過期
+  - `500 Internal Server Error`: 伺服器內部錯誤
+
+#### 2.4.3 查看單張照片詳情
+**HTTP 方法**: `GET`
+**API 路徑**: `/picture/user/photo/<photo_id>/`
+
+- **路徑參數**:
+  ```
+  photo_id: 1
+  ```
+
+- **Headers**:
+  ```
+  Authorization: Bearer <access_token>
+  ```
+
+- **成功回應 (200 OK)**:
+  ```json
+  {
+    "photo_id": 1,
+    "photo_url": "http://minio.example.com/bucket/photo_1.png",
+    "uploaded_at": "2026-03-27T16:00:00Z"
+  }
+  ```
+
+- **失敗回應**:
+  - `401 Unauthorized`: Token 無效或過期
+  - `404 Not Found`: 照片不存在
+  - `500 Internal Server Error`: 伺服器內部錯誤
+
+#### 2.4.4 更新照片信息
+**HTTP 方法**: `PUT`
+**API 路徑**: `/picture/user/photo/<photo_id>/`
+
+- **路徑參數**:
+  ```
+  photo_id: 1
+  ```
+
+- **輸入參數** (JSON):
+  ```json
+  {
+    "photo_file": "<二進位圖片檔案>" 
+  }
+  ```
+
+- **Headers**:
+  ```
+  Authorization: Bearer <access_token>
+  Content-Type: multipart/form-data
+  ```
+
+- **成功回應 (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "message": "照片已更新",
+    "photo_id": 1,
+    "photo_url": "http://minio.example.com/bucket/photo_1_updated.png",
+    "updated_at": "2026-03-27T17:30:00Z"
+  }
+  ```
+
+- **失敗回應**:
+  - `400 Bad Request`: 檔案驗證失敗
+  - `401 Unauthorized`: Token 無效或過期
+  - `403 Forbidden`: 無權限更新此照片
+  - `404 Not Found`: 照片不存在
+  - `415 Unsupported Media Type`: 不支持的檔案類型
+
+#### 2.4.5 刪除照片
+**HTTP 方法**: `DELETE`
+**API 路徑**: `/picture/user/photo/<photo_id>/`
+
+- **路徑參數**:
+  ```
+  photo_id: 1
+  ```
+
+- **Headers**:
+  ```
+  Authorization: Bearer <access_token>
+  ```
+
+- **成功回應 (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "message": "照片已刪除"
+  }
+  ```
+
+- **失敗回應**:
+  - `401 Unauthorized`: Token 無效或過期
+  - `403 Forbidden`: 無權限刪除此照片
+  - `404 Not Found`: 照片不存在
+  - `500 Internal Server Error`: 伺服器內部錯誤
+
+**📊 統一端點 CRUD 操作表** ⭐ 所有個人照片操作都經由同一端點：
+
+| HTTP 方法 | API 路徑 | 操作 | 身份要求 | 返回狀態碼 |
+|----------|---------|------|---------|----------|
+| **POST** | `/picture/user/photo` | ⬆️ 上傳照片 | 認證用戶 | 201 |
+| **GET** | `/picture/user/photo` | 📋 查看我的照片 | 認證用戶 | 200 |
+| **GET** | `/picture/user/photo/<id>/` | 👁️ 查看照片詳情 | 認證用戶 | 200 |
+| **PUT** | `/picture/user/photo/<id>/` | ✏️ 更新照片 | 照片擁有者 | 200 |
+| **DELETE** | `/picture/user/photo/<id>/` | 🗑️ 刪除照片 | 照片擁有者 | 200 |
+
+**✅ 確認：統一端點 `/picture/user/photo` 可以完整支持個人照片的 CRUD 操作**
 
 ---
 
@@ -701,13 +935,13 @@ AI 相關的智能功能
 | 4 | 使用者刪除帳號 | accounts | user | POST | ⭐⭐ | ✅ | `/account/user/delete` |
 | 5 | 上傳模特基本資料 | accounts | user | POST | ⭐⭐⭐ | 🔄 | `/account/user/user_info` |
 | 6 | 設定衣服資料 | picture | admin | POST/PUT | ⭐⭐⭐ | ✅ | `/picture/clothes/` |
-| 7 | 查看衣服總覽列表 | picture | user | GET | ⭐⭐⭐ | ⏳ | `/picture/clothes/` |
-| 8 | 新增衣服照片 | picture | user | POST | ⭐⭐⭐ | ✅ | `/picture/clothes/upload_image` |
+| 7 | 新增衣服（上傳圖片 + AI 處理） | picture | user | POST | ⭐⭐⭐ | ✅ | `/picture/clothes/` |
+| 8 | 查看衣服列表 | picture | user | GET | ⭐⭐⭐ | ✅ | `/picture/clothes/my` |
 | 9 | 查看喜歡的衣服 | picture | user | GET | ⭐⭐ | ✅ | `/picture/clothes/favorites` |
-| 10 | 查看穿搭總覽列表 | picture | user | GET | ⭐⭐⭐ | ⏳ | `/picture/outfit/` |
-| 11 | 新增穿搭組合 | picture | user | POST | ⭐⭐⭐ | ⏳ | `/picture/outfit/` |
-| 12 | 儲存當前穿搭 | picture | user | POST | ⭐⭐⭐ | ⏳ | `/picture/outfit/save_current` |
-| 13 | 上傳模特照片 | picture | user | POST | ⭐⭐⭐ | ✅ | `/picture/user/user_picture` |
+| 10 | 上傳個人照片 | picture | user | POST | ⭐⭐⭐ | ✅ | `/picture/user/photo` |
+| 11 | 查看穿搭總覽列表 | picture | user | GET | ⭐⭐⭐ | ⏳ | `/picture/outfit/` |
+| 12 | 新增穿搭組合 | picture | user | POST | ⭐⭐⭐ | ⏳ | `/picture/outfit/` |
+| 13 | 儲存當前穿搭 | picture | user | POST | ⭐⭐⭐ | ⏳ | `/picture/outfit/save_current` |
 | 14 | 上傳圖片 (通用) | picture | user | POST | ⭐⭐ | ⏳ | `/picture/upload/` |
 | 15 | AI 文字對話 | picture/ai | user | POST | ⭐⭐ | 🔄 | `/ai/chat` |
 

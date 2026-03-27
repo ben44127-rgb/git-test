@@ -1,7 +1,8 @@
 # API 文檔
 
-> 更新時間: 2026-03-23  
+> 更新時間: 2026-03-27  
 > 說明: test_project Main Backend 的完整 API 文檔，包含所有端點、參數、響應示例
+> 最新更新: 照片管理模塊重組 - 整合衣服管理和用戶個人照片上傳功能
 
 ---
 
@@ -10,7 +11,7 @@
 | 模組 | 基礎路徑 | 說明 |
 |------|--------|------|
 | **認證** | `/account/user/` | 用戶註冊、登錄、登出等認證功能 |
-| **圖片管理** | `/picture/clothes/` | 服裝圖片上傳、管理功能 |
+| **照片管理** | `/picture/` | 衣服、穿搭列表管理、用戶個人照片 |
 | **健康檢查** | `/health` | 服務狀態檢查 |
 
 ---
@@ -208,10 +209,12 @@ Content-Type: application/json
 
 ---
 
-## 📸 圖片管理 API
+## 📸 照片管理 API
 
-### 📍 POST `/picture/clothes/upload_image`
-**描述**: 上傳服裝圖片到 MinIO 存儲
+### 📕 衣服管理端點
+
+### 📍 POST `/picture/clothes/` ⭐ 新增衣服
+**描述**: 用戶上傳衣服圖片，系統進行 AI 去背並自動提取衣服信息
 
 **請求頭**:
 ```
@@ -221,102 +224,69 @@ Content-Type: multipart/form-data
 
 **請求體 (form-data)**:
 ```
-file: <binary image data>
-category: "shirt" | "pants" | "dress" | "shoes"
-user_id: 1
+image_data: <二進位圖片文件> (必需)
+user_uid: <用戶UID> (可選，若使用JWT可不提供)
+```
+
+**完整流程**:
+```
+1. 用戶上傳圖片 + 基本尺寸信息
+   ↓
+2. 後端轉發給 AI 進行去背處理
+   ↓
+3. AI 分析並返回：衣服分類、顏色、風格
+   ↓
+4. 圖片存儲到 MinIO
+   ↓
+5. 完整數據存儲到 DB
+   ↓
+6. 返回衣服詳情給前端
 ```
 
 **成功響應 (200 OK)**:
 ```json
 {
-  "image_id": 123,
-  "user_id": 1,
-  "filename": "shoes_001.jpg",
-  "file_size": 2048576,
-  "category": "shirt",
-  "minIO_url": "http://192.168.233.128:9000/bucket/user_1/shoes_001.jpg",
-  "presigned_url": "http://192.168.233.128:9000/bucket/user_1/shoes_001.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&...",
-  "presigned_url_expires": 900,
-  "uploaded_at": "2026-03-23T16:00:00Z"
-}
-```
-
-**錯誤響應 (400 Bad Request)**:
-```json
-{
-  "error": "invalid_file_format",
-  "message": "只支持 JPG, PNG, GIF 格式"
-}
-```
-
-**錯誤響應 (413 Payload Too Large)**:
-```json
-{
-  "error": "file_too_large",
-  "message": "文件大小超過 50MB 限制"
-}
-```
-
----
-
-### 📍 POST `/picture/clothes/` ✅ 新增功能
-**描述**: 創建新衣服（需要管理員權限）
-
-**請求頭**:
-```
-Authorization: Bearer <admin_token>
-Content-Type: application/json
-```
-
-**請求體**:
-```json
-{
-  "clothes_category": "上衣",
-  "clothes_arm_length": 60,
-  "clothes_shoulder_width": 45,
-  "clothes_waistline": 80,
-  "clothes_leg_length": 0,
-  "clothes_image_url": "http://minio.example.com/bucket/clothes_001.jpg",
-  "colors": ["藍色", "紅色", "黑色"],
-  "styles": ["休閒", "正式", "運動"]
-}
-```
-
-**成功響應 (201 Created)**:
-```json
-{
-  "clothes_id": 1,
-  "clothes_uid": "550e8400-e29b-41d4-a716-446655440000",
-  "clothes_category": "上衣",
-  "clothes_arm_length": 60,
-  "clothes_shoulder_width": 45,
-  "clothes_waistline": 80,
-  "clothes_leg_length": 0,
-  "clothes_image_url": "http://minio.example.com/bucket/clothes_001.jpg",
-  "clothes_favorite": false,
-  "clothes_created_time": "2026-03-23T16:00:00Z",
-  "clothes_updated_time": "2026-03-23T16:00:00Z",
-  "colors": [
-    {"color_id": 1, "color_uid": "...", "color_name": "藍色"},
-    {"color_id": 2, "color_uid": "...", "color_name": "紅色"},
-    {"color_id": 3, "color_uid": "...", "color_name": "黑色"}
-  ],
-  "styles": [
-    {"style_id": 1, "style_uid": "...", "style_name": "休閒"},
-    {"style_id": 2, "style_uid": "...", "style_name": "正式"},
-    {"style_id": 3, "style_uid": "...", "style_name": "運動"}
-  ]
+  "success": true,
+  "message": "圖片處理和儲存成功",
+  "processed_url": "http://minio.example.com/bucket/processed_image.png",
+  "ai_status": {
+    "status_code": 200,
+    "message": "去背成功",
+    "tools_status": {
+      "rembg_engine": "success",
+      "opencv_masking": "success",
+      "gemini_consultant": "success"
+    }
+  },
+  "storage_status": {
+    "success": true,
+    "filename": "unique_id_cleaned_garment.png",
+    "file_format": "PNG",
+    "storage": "minio",
+    "bucket": "clothes-bucket"
+  },
+  "clothes_data": {
+    "clothes_uid": "550e8400-e29b-41d4-a716-446655440000",
+    "clothes_category": "T-shirt",
+    "styles": ["Casual", "Formal", "Streetwear"],
+    "colors": ["red", "blue", "green"],
+    "image_url": "http://minio.example.com/..."
+  }
 }
 ```
 
 **錯誤響應**:
-- `400 Bad Request`: 數據驗證失敗
-- `403 Forbidden`: 無管理員權限
+- `400 Bad Request`: 缺少圖片或檔案驗證失敗
+- `401 Unauthorized`: 未認證或令牌過期
+- `415 Unsupported Media Type`: 上傳非圖片檔案
+- `422 Unprocessable Entity`: 圖片過於模糊或無法處理
+- `503 Service Unavailable`: AI 或 MinIO 服務不可用
+- `504 Gateway Timeout`: AI 處理逾時
 
 ---
 
-### 📍 GET `/picture/clothes/` ✅ 新增功能
-**描述**: 獲取衣服列表（支持分頁和篩選）
+### 📍 GET `/picture/clothes/my` ⭐ 我的衣服列表
+**描述**: 獲取當前用戶的衣服列表（管理員可查看所有）
 
 **請求頭**:
 ```
@@ -325,50 +295,56 @@ Authorization: Bearer <token>
 
 **查詢參數**:
 ```
-page: 1 (分頁頁數)
-limit: 20 (每頁數量)
+page: 1 (分頁頁數，預設1)
+limit: 20 (每頁數量，預設20)
 category: "上衣" (按分類篩選，可選)
 ```
 
 **示例**:
 ```
-GET /picture/clothes/?page=1&limit=20&category=上衣
+GET /picture/clothes/my?page=1&limit=20&category=T-shirt
 ```
 
 **成功響應 (200 OK)**:
 ```json
 {
-  "count": 150,
-  "total_pages": 8,
+  "count": 15,
+  "total_pages": 1,
   "current_page": 1,
   "results": [
     {
       "clothes_id": 1,
       "clothes_uid": "550e8400-e29b-41d4-a716-446655440000",
-      "clothes_category": "上衣",
+      "clothes_category": "T-shirt",
       "clothes_arm_length": 60,
       "clothes_shoulder_width": 45,
       "clothes_waistline": 80,
       "clothes_leg_length": 0,
       "clothes_image_url": "http://minio.example.com/...",
       "clothes_favorite": false,
-      "clothes_created_time": "2026-03-23T16:00:00Z",
-      "clothes_updated_time": "2026-03-23T16:00:00Z",
+      "clothes_created_time": "2026-03-27T16:00:00Z",
+      "clothes_updated_time": "2026-03-27T16:00:00Z",
       "colors": [
-        {"color_id": 1, "color_uid": "...", "color_name": "藍色"}
+        {"color_id": 1, "color_uid": "...", "color_name": "red"},
+        {"color_id": 2, "color_uid": "...", "color_name": "blue"}
       ],
       "styles": [
-        {"style_id": 1, "style_uid": "...", "style_name": "休閒"}
+        {"style_id": 1, "style_uid": "...", "style_name": "Casual"},
+        {"style_id": 2, "style_uid": "...", "style_name": "Formal"}
       ]
     }
   ]
 }
 ```
 
+**錯誤響應**:
+- `401 Unauthorized`: 未認證或令牌過期
+- `500 Internal Server Error`: 服務器內部錯誤
+
 ---
 
-### 📍 GET `/picture/clothes/{id}/` ✅ 新增功能
-**描述**: 獲取衣服詳情
+### 📍 GET `/picture/clothes/<id>/` ✅ 衣服詳情
+**描述**: 獲取單個衣服的詳細信息
 
 **請求頭**:
 ```
@@ -385,41 +361,38 @@ id: 1 (衣服 ID)
 {
   "clothes_id": 1,
   "clothes_uid": "550e8400-e29b-41d4-a716-446655440000",
-  "clothes_category": "上衣",
+  "clothes_category": "T-shirt",
   "clothes_arm_length": 60,
   "clothes_shoulder_width": 45,
   "clothes_waistline": 80,
   "clothes_leg_length": 0,
   "clothes_image_url": "http://minio.example.com/...",
   "clothes_favorite": false,
-  "clothes_created_time": "2026-03-23T16:00:00Z",
-  "clothes_updated_time": "2026-03-23T16:00:00Z",
+  "clothes_created_time": "2026-03-27T16:00:00Z",
+  "clothes_updated_time": "2026-03-27T16:00:00Z",
   "colors": [
-    {"color_id": 1, "color_uid": "...", "color_name": "藍色"},
-    {"color_id": 2, "color_uid": "...", "color_name": "紅色"}
+    {"color_id": 1, "color_uid": "...", "color_name": "red"},
+    {"color_id": 2, "color_uid": "...", "color_name": "blue"}
   ],
   "styles": [
-    {"style_id": 1, "style_uid": "...", "style_name": "休閒"},
-    {"style_id": 2, "style_uid": "...", "style_name": "正式"}
+    {"style_id": 1, "style_uid": "...", "style_name": "Casual"},
+    {"style_id": 2, "style_uid": "...", "style_name": "Formal"}
   ]
 }
 ```
 
-**錯誤響應 (404 Not Found)**:
-```json
-{
-  "detail": "Not found."
-}
-```
+**錯誤響應**:
+- `401 Unauthorized`: 未認證或令牌過期
+- `404 Not Found`: 衣服不存在
 
 ---
 
-### 📍 PUT `/picture/clothes/{id}/` ✅ 新增功能
-**描述**: 更新衣服（需要管理員權限）
+### 📍 PUT `/picture/clothes/<id>/` ✅ 更新衣服
+**描述**: 更新衣服信息（衣服擁有者或管理員）
 
 **請求頭**:
 ```
-Authorization: Bearer <admin_token>
+Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
@@ -428,17 +401,16 @@ Content-Type: application/json
 id: 1 (衣服 ID)
 ```
 
-**請求體**:
+**請求體** (任意字段都可選):
 ```json
 {
-  "clothes_category": "褲子",
+  "clothes_category": "Pants",
   "clothes_arm_length": 0,
   "clothes_shoulder_width": 0,
   "clothes_waistline": 85,
   "clothes_leg_length": 100,
-  "clothes_image_url": "http://minio.example.com/bucket/pants_001.jpg",
-  "colors": ["黑色", "藍色"],
-  "styles": ["正式", "商務"]
+  "colors": ["black", "blue"],
+  "styles": ["Formal", "Business"]
 }
 ```
 
@@ -447,39 +419,40 @@ id: 1 (衣服 ID)
 {
   "clothes_id": 1,
   "clothes_uid": "550e8400-e29b-41d4-a716-446655440000",
-  "clothes_category": "褲子",
+  "clothes_category": "Pants",
   "clothes_arm_length": 0,
   "clothes_shoulder_width": 0,
   "clothes_waistline": 85,
   "clothes_leg_length": 100,
-  "clothes_image_url": "http://minio.example.com/bucket/pants_001.jpg",
+  "clothes_image_url": "http://minio.example.com/...",
   "clothes_favorite": false,
-  "clothes_created_time": "2026-03-23T16:00:00Z",
-  "clothes_updated_time": "2026-03-23T16:30:00Z",
+  "clothes_created_time": "2026-03-27T16:00:00Z",
+  "clothes_updated_time": "2026-03-27T16:30:00Z",
   "colors": [
-    {"color_id": 1, "color_uid": "...", "color_name": "黑色"},
-    {"color_id": 2, "color_uid": "...", "color_name": "藍色"}
+    {"color_id": 1, "color_uid": "...", "color_name": "black"},
+    {"color_id": 2, "color_uid": "...", "color_name": "blue"}
   ],
   "styles": [
-    {"style_id": 1, "style_uid": "...", "style_name": "正式"},
-    {"style_id": 2, "style_uid": "...", "style_name": "商務"}
+    {"style_id": 1, "style_uid": "...", "style_name": "Formal"},
+    {"style_id": 2, "style_uid": "...", "style_name": "Business"}
   ]
 }
 ```
 
 **錯誤響應**:
 - `400 Bad Request`: 數據驗證失敗
-- `403 Forbidden`: 無管理員權限
+- `401 Unauthorized`: 未認證或令牌過期
+- `403 Forbidden`: 無權限修改（只有擁有者或管理員可修改）
 - `404 Not Found`: 衣服不存在
 
 ---
 
-### 📍 DELETE `/picture/clothes/{id}/` ✅ 新增功能
-**描述**: 刪除衣服（需要管理員權限）
+### 📍 DELETE `/picture/clothes/<id>/` ✅ 刪除衣服
+**描述**: 刪除衣服（衣服擁有者或管理員）
 
 **請求頭**:
 ```
-Authorization: Bearer <admin_token>
+Authorization: Bearer <token>
 ```
 
 **路徑參數**:
@@ -495,8 +468,47 @@ id: 1 (衣服 ID)
 ```
 
 **錯誤響應**:
-- `403 Forbidden`: 無管理員權限
+- `401 Unauthorized`: 未認證或令牌過期
+- `403 Forbidden`: 無權限刪除（只有擁有者或管理員可刪除）
 - `404 Not Found`: 衣服不存在
+
+---
+
+### 📸 用戶照片管理端點
+
+### 📍 POST `/picture/user/photo` ⭐ 上傳個人照片
+**描述**: 用戶上傳個人照片（全身照、頭像等），存儲到 MinIO 並更新用戶檔案
+
+**請求頭**:
+```
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+```
+
+**請求體 (form-data)**:
+```
+photo_file: <二進位圖片檔案> (JPG, PNG, GIF, WebP，最大 10MB)
+```
+
+**成功響應 (201 Created)**:
+```json
+{
+  "success": true,
+  "message": "個人照片上傳成功",
+  "photo_url": "http://minio.example.com/bucket/user_uuid_photo_uuid.png",
+  "user": {
+    "user_uid": "550e8400-e29b-41d4-a716-446655440000",
+    "user_name": "john_doe",
+    "user_image_url": "http://minio.example.com/bucket/user_uuid_photo_uuid.png"
+  }
+}
+```
+
+**錯誤響應**:
+- `400 Bad Request`: 缺少檔案參數或檔案過大 (>10MB)
+- `401 Unauthorized`: Token 無效或過期
+- `415 Unsupported Media Type`: 不支持的檔案類型
+- `503 Service Unavailable`: MinIO 存儲服務不可用
 
 ---
 
@@ -510,22 +522,8 @@ id: 1 (衣服 ID)
 **成功響應 (200 OK)**:
 ```json
 {
-  "status": "ok",
-  "timestamp": "2026-03-23T16:30:00Z",
-  "database": "connected",
-  "minio": "connected",
-  "version": "1.0.0"
-}
-```
-
-**服務異常響應 (503 Service Unavailable)**:
-```json
-{
-  "status": "error",
-  "timestamp": "2026-03-23T16:35:00Z",
-  "database": "disconnected",
-  "minio": "connected",
-  "message": "PostgreSQL 數據庫連接失敗"
+  "status": "healthy",
+  "message": "服務運行正常"
 }
 ```
 
@@ -533,20 +531,19 @@ id: 1 (衣服 ID)
 
 ## 📊 API 路由總表
 
-| 方法 | 路徑 | 描述 | 認證 |
-|------|------|------|------|
-| POST | `/account/user/register` | 用戶註冊 | ❌ |
-| POST | `/account/user/login` | 用戶登錄 | ❌ |
-| POST | `/account/user/logout` | 用戶登出 | ✅ |
-| GET | `/account/user/list` | 列出用戶（管理員） | ✅ |
-| POST | `/account/user/delete` | 刪除用戶 | ✅ |
-| POST | `/picture/clothes/` | 新增衣服（管理員） | ✅ |
-| GET | `/picture/clothes/` | 查看衣服列表 | ✅ |
-| GET | `/picture/clothes/{id}/` | 查看衣服詳情 | ✅ |
-| PUT | `/picture/clothes/{id}/` | 更新衣服（管理員） | ✅ |
-| DELETE | `/picture/clothes/{id}/` | 刪除衣服（管理員） | ✅ |
-| POST | `/picture/clothes/upload_image` | 上傳圖片 | ✅ |
-| GET | `/health` | 健康檢查 | ❌ |
+| 方法 | 路徑 | 描述 | 認證 | 備註 |
+|------|------|------|------|------|
+| POST | `/account/user/register` | 用戶註冊 | ❌ | - |
+| POST | `/account/user/login` | 用戶登錄 | ❌ | - |
+| POST | `/account/user/logout` | 用戶登出 | ✅ | - |
+| GET | `/account/user/list` | 列出用戶 | ✅ | 管理員 |
+| POST | `/account/user/delete` | 刪除用戶 | ✅ | - |
+| **POST** | **`/picture/clothes/`** | **新增衣服** | ✅ | **⭐ 統一端點** |
+| **GET** | **`/picture/clothes/my`** | **我的衣服** | ✅ | **用戶查看** |
+| GET | `/picture/clothes/<id>/` | 衣服詳情 | ✅ | - |
+| PUT | `/picture/clothes/<id>/` | 更新衣服 | ✅ | 擁有者/管理員 |
+| DELETE | `/picture/clothes/<id>/` | 刪除衣服 | ✅ | 擁有者/管理員 |
+| GET | `/health` | 健康檢查 | ❌ | - |
 
 ---
 
@@ -556,23 +553,6 @@ id: 1 (衣服 ID)
 
 ```
 Authorization: Bearer <jwt_token>
-```
-
-**JWT Token 結構**:
-```json
-Header: {
-  "alg": "HS256",
-  "typ": "JWT"
-}
-
-Payload: {
-  "user_id": 1,
-  "username": "john_doe",
-  "iat": 1679580000,
-  "exp": 1679666400
-}
-
-Signature: HMAC_SHA256(header.payload, secret_key)
 ```
 
 ---
@@ -586,10 +566,11 @@ Signature: HMAC_SHA256(header.payload, secret_key)
 | 401 | Unauthorized | 認證失敗或令牌過期 |
 | 403 | Forbidden | 無權限訪問此資源 |
 | 404 | Not Found | 資源不存在 |
-| 413 | Payload Too Large | 上傳文件過大 |
-| 429 | Too Many Requests | 請求過於頻繁（速率限制） |
+| 415 | Unsupported Media Type | 不支持的媒體類型 |
+| 422 | Unprocessable Entity | 無法處理的實體 |
 | 500 | Internal Server Error | 服務器內部錯誤 |
-| 503 | Service Unavailable | 服務不可用（數據庫或 MinIO 連接失敗） |
+| 503 | Service Unavailable | 服務不可用 |
+| 504 | Gateway Timeout | 請求超時 |
 
 ---
 

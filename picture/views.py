@@ -728,92 +728,50 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.core.paginator import Paginator
-from accounts.models import Clothes, Style, Color
+from accounts.models import Clothes, Style, Color, User
 from .serializers import ClothesSerializer, ClothesCreateSerializer, ClothesDetailSerializer
 import uuid
 
 
-@api_view(['POST', 'GET'])
+@api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def clothes_list_create(request):
+def user_clothes_list(request):
     """
-    衣服列表和創建端點
+    用戶衣服列表端點
     
-    POST: 創建新衣服 (需要管理員權限)
-    GET: 獲取衣服列表 (支持分頁和篩選)
+    GET: 獲取當前用戶的衣服列表
+         如果用戶為管理員，可查看所有衣服
+    
+    Query Parameters:
+        - category: 按分類篩選
+        - page: 頁碼 (預設 1)
+        - limit: 每頁筆數 (預設 20)
+    
+    Success 200:
+    {
+        "count": 10,
+        "total_pages": 1,
+        "current_page": 1,
+        "results": [{衣服詳情}, ...]
+    }
     """
-    
-    if request.method == 'POST':
-        # 檢查是否為管理員
-        if not request.user.is_staff and not request.user.is_superuser:
-            return Response(
-                {'detail': '只有管理員才能創建衣服'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # 驗證數據
-        serializer = ClothesCreateSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(
-                serializer.errors,
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        try:
-            # 創建衣服
-            clothes_uid = str(uuid.uuid4())
-            clothes = Clothes.objects.create(
-                f_user_uid=request.user.user_uid,
-                clothes_uid=clothes_uid,
-                clothes_category=serializer.validated_data['clothes_category'],
-                clothes_arm_length=serializer.validated_data.get('clothes_arm_length', 0),
-                clothes_shoulder_width=serializer.validated_data.get('clothes_shoulder_width', 0),
-                clothes_waistline=serializer.validated_data.get('clothes_waistline', 0),
-                clothes_leg_length=serializer.validated_data.get('clothes_leg_length', 0),
-                clothes_image_url=serializer.validated_data.get('clothes_image_url', ''),
-            )
-            
-            # 創建顏色
-            for color_name in serializer.validated_data.get('colors', []):
-                Color.objects.create(
-                    f_clothes_uid=clothes_uid,
-                    color_uid=str(uuid.uuid4()),
-                    color_name=color_name
-                )
-            
-            # 創建風格
-            for style_name in serializer.validated_data.get('styles', []):
-                Style.objects.create(
-                    f_clothes_uid=clothes_uid,
-                    style_uid=str(uuid.uuid4()),
-                    style_name=style_name
-                )
-            
-            logger.info(f"✅ 管理員 {request.user.user_name} 創建衣服: {clothes_uid}")
-            
-            # 返回創建的衣服
-            output_serializer = ClothesDetailSerializer(clothes)
-            return Response(
-                output_serializer.data,
-                status=status.HTTP_201_CREATED
-            )
-        
-        except Exception as e:
-            logger.error(f"❌ 創建衣服失敗: {str(e)}")
-            return Response(
-                {'detail': f'創建衣服失敗: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-    
-    # GET: 獲取衣服列表
     try:
         # 獲取查詢參數
         category = request.query_params.get('category', None)
         page = request.query_params.get('page', 1)
         limit = request.query_params.get('limit', 20)
         
-        # 構建查詢
-        queryset = Clothes.objects.all().order_by('-clothes_created_time')
+        # 構建查詢 - 根據用戶身份決定查詢範圍
+        if request.user.is_staff or request.user.is_superuser:
+            # 管理員可以查看所有衣服
+            queryset = Clothes.objects.all().order_by('-clothes_created_time')
+            logger.info(f"✅ 管理員 {request.user.user_name} 查看所有衣服")
+        else:
+            # 普通用戶只能查看自己的衣服
+            queryset = Clothes.objects.filter(
+                f_user_uid=str(request.user.user_uid)
+            ).order_by('-clothes_created_time')
+            logger.info(f"✅ 用戶 {request.user.user_name} 查看自己的衣服")
         
         # 按分類篩選
         if category:
@@ -847,9 +805,11 @@ def clothes_detail(request, clothes_id):
     """
     衣服詳情端點
     
-    GET: 獲取衣服詳情
-    PUT: 更新衣服 (需要管理員權限)
-    DELETE: 刪除衣服 (需要管理員權限)
+    GET: 獲取衣服詳情 (所有認證用戶皆可)
+    PUT: 更新衣服 (只有衣服擁有者或管理員可更新)
+    DELETE: 刪除衣服 (只有衣服擁有者或管理員可刪除)
+    
+    URL: /picture/clothes/<clothes_id>/
     """
     
     # 獲取衣服
@@ -867,10 +827,13 @@ def clothes_detail(request, clothes_id):
             )
     
     elif request.method == 'PUT':
-        # 檢查是否為管理員
-        if not request.user.is_staff and not request.user.is_superuser:
+        # 檢查權限 - 只有衣服擁有者或管理員才能更新
+        is_owner = str(clothes.f_user_uid) == str(request.user.user_uid)
+        is_admin = request.user.is_staff or request.user.is_superuser
+        
+        if not (is_owner or is_admin):
             return Response(
-                {'detail': '只有管理員才能更新衣服'},
+                {'detail': '只有衣服擁有者或管理員才能更新此衣服'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
@@ -930,7 +893,7 @@ def clothes_detail(request, clothes_id):
                         style_name=style_name
                     )
             
-            logger.info(f"✅ 管理員 {request.user.user_name} 更新衣服: {clothes.clothes_uid}")
+            logger.info(f"✅ 用戶 {request.user.user_name} 更新衣服: {clothes.clothes_uid}")
             
             # 返回更新的衣服
             output_serializer = ClothesDetailSerializer(clothes)
@@ -947,10 +910,13 @@ def clothes_detail(request, clothes_id):
             )
     
     elif request.method == 'DELETE':
-        # 檢查是否為管理員
-        if not request.user.is_staff and not request.user.is_superuser:
+        # 檢查權限 - 只有衣服擁有者或管理員才能刪除
+        is_owner = str(clothes.f_user_uid) == str(request.user.user_uid)
+        is_admin = request.user.is_staff or request.user.is_superuser
+        
+        if not (is_owner or is_admin):
             return Response(
-                {'detail': '只有管理員才能刪除衣服'},
+                {'detail': '只有衣服擁有者或管理員才能刪除此衣服'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
@@ -965,7 +931,7 @@ def clothes_detail(request, clothes_id):
             # 刪除衣服
             clothes.delete()
             
-            logger.info(f"✅ 管理員 {request.user.user_name} 刪除衣服: {clothes_uid}")
+            logger.info(f"✅ 用戶 {request.user.user_name} 刪除衣服: {clothes_uid}")
             
             return Response(
                 {'detail': '衣服已刪除'},
@@ -978,4 +944,120 @@ def clothes_detail(request, clothes_id):
                 {'detail': f'刪除失敗: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_user_photo(request):
+    """
+    用戶個人照片上傳端點
+    
+    POST: 上傳用戶的個人照片（全身照或其他個人照片）
+    
+    URL: /picture/user/photo
+    Content-Type: multipart/form-data
+    
+    流程：
+    1. 接收用戶上傳的照片文件
+    2. 驗證文件格式和大小
+    3. 上傳到 MinIO 存儲
+    4. 更新用戶的 user_image_url 字段
+    5. 返回圖片 URL
+    
+    請求參數:
+    - photo_file: 照片檔案 (JPG, PNG 等，最大 10MB)
+    
+    """
+    
+    try:
+        # 驗證文件
+        if 'photo_file' not in request.FILES:
+            return Response(
+                {'detail': '缺少照片檔案 (photo_file)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        photo_file = request.FILES['photo_file']
+        
+        # 驗證文件大小 (最大 10MB)
+        if photo_file.size > 10 * 1024 * 1024:
+            return Response(
+                {'detail': '檔案過大，最多 10MB'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 驗證文件類型
+        allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+        if photo_file.content_type not in allowed_types:
+            return Response(
+                {'detail': f'不支持的檔案類型: {photo_file.content_type}'},
+                status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+            )
+        
+        # 取得 MinIO 客戶端
+        minio_client = get_minio_client()
+        if not minio_client:
+            logger.error("❌ 無法連接到 MinIO 服務")
+            return Response(
+                {'detail': '圖片存儲服務不可用'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        
+        # 生成唯一的文件名
+        file_ext = photo_file.name.split('.')[-1] if '.' in photo_file.name else 'jpg'
+        file_name = f"user_{request.user.user_uid}_photo_{uuid.uuid4()}.{file_ext}"
+        
+        # 讀取文件內容
+        photo_data = photo_file.read()
+        photo_stream = io.BytesIO(photo_data)
+        
+        # 上傳到 MinIO
+        try:
+            bucket_name = settings.MINIO_BUCKET_NAME
+            minio_client.put_object(
+                bucket_name,
+                file_name,
+                photo_stream,
+                len(photo_data),
+                content_type=photo_file.content_type
+            )
+            logger.info(f"✅ 用戶照片已上傳到 MinIO: {file_name}")
+        except S3Error as e:
+            logger.error(f"❌ MinIO 上傳失敗: {str(e)}")
+            return Response(
+                {'detail': '圖片上傳失敗'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        
+        # 生成 MinIO URL
+        minio_host = settings.MINIO_URL.rstrip('/')
+        photo_url = f"{minio_host}/{bucket_name}/{file_name}"
+        
+        # 更新用戶的 image_url
+        user = request.user
+        user.user_image_url = photo_url
+        user.save()
+        
+        logger.info(f"✅ 用戶 {user.user_name} 上傳個人照片成功")
+        
+        return Response(
+            {
+                'success': True,
+                'message': '個人照片上傳成功',
+                'photo_url': photo_url,
+                'user': {
+                    'user_uid': str(user.user_uid),
+                    'user_name': user.user_name,
+                    'user_image_url': user.user_image_url
+                }
+            },
+            status=status.HTTP_201_CREATED
+        )
+    
+    except Exception as e:
+        logger.error(f"❌ 上傳個人照片失敗: {str(e)}")
+        return Response(
+            {'detail': f'上傳失敗: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
