@@ -897,7 +897,7 @@ def user_clothes_list(request):
 
 @api_view(['GET', 'PUT', 'DELETE'])
 @permission_classes([IsAuthenticated])
-def clothes_detail(request, clothes_id):
+def clothes_detail(request, clothes_uid):
     """
     衣服詳情端點
     
@@ -905,11 +905,11 @@ def clothes_detail(request, clothes_id):
     PUT: 更新衣服 (只有衣服擁有者或管理員可更新)
     DELETE: 刪除衣服 (只有衣服擁有者或管理員可刪除)
     
-    URL: /picture/clothes/<clothes_id>/
+    URL: /picture/clothes/<clothes_uid>/
     """
     
     # 獲取衣服
-    clothes = get_object_or_404(Clothes, clothes_id=clothes_id)
+    clothes = get_object_or_404(Clothes, clothes_uid=clothes_uid)
     
     if request.method == 'GET':
         try:

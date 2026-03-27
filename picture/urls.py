@@ -30,10 +30,6 @@ urlpatterns = [
     # GET: 獲取單個衣服詳情（任何用戶均可）
     # PUT: 更新衣服（衣服擁有者或管理員）
     # DELETE: 刪除衣服（衣服擁有者或管理員）
-    path('picture/clothes/<int:clothes_id>/', views.clothes_detail, name='clothes_detail'),
-    
-    # ========== 用戶照片管理端點 ==========
-    # 用戶上傳個人照片（全身照、頭像等）
-    # POST: /picture/user/photo （multipart/form-data）
+    path('picture/clothes/<str:clothes_uid>/', views.clothes_detail, name='clothes_detail'),
     path('picture/user/photo', views.upload_user_photo, name='upload_user_photo'),
 ]

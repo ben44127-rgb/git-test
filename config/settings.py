@@ -211,7 +211,7 @@ MINIO_SECURE = os.getenv('MINIO_SECURE', 'False') == 'True'
 
 # MinIO 外部訪問地址（用於生成預簽名 URL 返回給前端）
 # 前端瀏覽器需要用這個地址來訪問圖片
-MINIO_EXTERNAL_URL = os.getenv('MINIO_EXTERNAL_URL', 'http://192.168.233.128:9000')
+MINIO_EXTERNAL_URL = os.getenv('MINIO_EXTERNAL_URL', 'http://localhost:9000')
 
 # AI 後端服務配置
 AI_BACKEND_URL = os.getenv('AI_BACKEND_URL', 'http://192.168.233.128:8002/virtual_try_on/clothes/remove_bg')
