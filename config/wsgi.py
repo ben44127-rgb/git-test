@@ -1,8 +1,8 @@
 """
 WSGI config for image processing backend.
-圖像處理後端的 WSGI 配置
+圖像處理後端的 WSGI 設定
 
-WSGI (Web Server Gateway Interface) 是 Python Web 應用和 Web 服務器之間的標準介面
+WSGI (Web Server Gateway Interface) 是 Python Web 應用和 Web 伺務器之間的標準介面
 這個檔案提供了 WSGI 應用物件，用於部署到生產環境
 
 使用方法:
@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 from django.core.wsgi import get_wsgi_application
 
-# 提前載入環境變數，確保 WSGI 應用能使用 .env 中的配置
+# 提前載入環境變數，確保 WSGI 應用能使用 .env 中的設定
 try:
     from dotenv import load_dotenv
     # 找到專案根目錄的 .env 檔案
@@ -29,5 +29,5 @@ except ImportError:
 # 設定 Django 設定模組的環境變數
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
-# 获取 WSGI 应用对象
+# 獲取 WSGI 應用對象
 application = get_wsgi_application()

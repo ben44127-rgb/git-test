@@ -1,18 +1,18 @@
 #!/bin/bash
 
 # ==========================================
-# Django 圖片處理服務統一停止腳本
+# Django 圖片處理伺務統一停止腳本
 # 版本：1.0
 # 最後更新：2026-03-23
 # ==========================================
-# 這個腳本可以停止不同模式下運行的服務：
+# 這個腳本可以停止不同模式下運行的伺務：
 # 1. Docker Compose 模式
 # 2. 本地開發模式
 #
 # 使用方式：
 #   ./stop.sh              # 自動偵測並停止所有模式
 #   ./stop.sh --docker     # 只停止 Docker Compose
-#   ./stop.sh --local      # 只停止本地開發伺服器
+#   ./stop.sh --local      # 只停止本地開發伺伺器
 #   ./stop.sh --help       # 顯示幫助
 
 set -e  # 遇到錯誤立即退出
@@ -39,8 +39,8 @@ while [[ $# -gt 0 ]]; do
             echo "使用方式: $0 [選項]"
             echo ""
             echo "選項："
-            echo "  --docker    只停止 Docker Compose 服務"
-            echo "  --local     只停止本地開發伺服器"
+            echo "  --docker    只停止 Docker Compose 伺務"
+            echo "  --local     只停止本地開發伺伺器"
             echo "  --all       停止所有模式（預設）"
             echo "  --help      顯示此幫助訊息"
             exit 0
@@ -59,15 +59,15 @@ if [ -z "$FORCE_MODE" ]; then
 fi
 
 echo "=========================================="
-echo "   停止 Django 圖片處理服務"
+echo "   停止 Django 圖片處理伺務"
 echo "=========================================="
 echo ""
 
 # ==========================================
-# 停止本地開發伺服器
+# 停止本地開發伺伺器
 # ==========================================
 stop_local() {
-    echo "💻 停止本地開發服務..."
+    echo "💻 停止本地開發伺務..."
     echo ""
     
     # 查找並停止 Django 進程
@@ -121,10 +121,10 @@ stop_local() {
 }
 
 # ==========================================
-# 停止 Docker Compose 服務
+# 停止 Docker Compose 伺務
 # ==========================================
 stop_docker() {
-    echo "🐳 停止 Docker Compose 服務..."
+    echo "🐳 停止 Docker Compose 伺務..."
     echo ""
     
     # 檢查是否在 Docker 容器內
@@ -154,9 +154,9 @@ stop_docker() {
     echo "🔍 當前運行的容器："
     docker ps --filter "name=django-backend" --filter "name=minio" --filter "name=auth_postgres" --format "table {{.Names}}\t{{.Status}}"
     
-    # 停止服務
+    # 停止伺務
     echo ""
-    echo "🛑 停止服務..."
+    echo "🛑 停止伺務..."
     $COMPOSE_CMD down
     
     # 確認停止
@@ -164,7 +164,7 @@ stop_docker() {
     if docker ps | grep -q "django-backend\|minio\|auth_postgres"; then
         echo "⚠️  部分容器仍在運行"
     else
-        echo "✅ Docker 服務已全部停止（PostgreSQL + MinIO + Backend）"
+        echo "✅ Docker 伺務已全部停止（PostgreSQL + MinIO + Backend）"
     fi
 }
 

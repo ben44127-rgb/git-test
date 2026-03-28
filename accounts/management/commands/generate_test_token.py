@@ -29,7 +29,7 @@ class Command(BaseCommand):
             '--username',
             type=str,
             default='admin',
-            help='用戶名 (默認: admin)'
+            help='用戶名 (預認: admin)'
         )
         
         # token 有效天數
@@ -37,7 +37,7 @@ class Command(BaseCommand):
             '--days',
             type=int,
             default=365,
-            help='Token 有效天數 (默認: 365 天，約 1 年)'
+            help='Token 有效天數 (預認: 365 天，約 1 年)'
         )
         
         # 是否自動創建用戶

@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # ==========================================
-# Django 圖片處理服務統一啟動腳本
+# Django 圖片處理伺務統一啟動腳本
 # 版本：1.0
 # 最後更新：2026-03-23
 # ==========================================
 # 這個腳本可以自動偵測環境並選擇適當的啟動方式：
 # 1. Docker 容器內部 - 使用 Gunicorn 啟動
 # 2. 宿主機 + Docker - 使用 Docker Compose 啟動
-# 3. 宿主機本地開發 - 使用 Django 開發伺服器啟動
+# 3. 宿主機本地開發 - 使用 Django 開發伺伺器啟動
 #
 # 使用方式：
 #   ./start.sh              # 自動偵測環境（預設 Docker 模式）
@@ -50,7 +50,7 @@ while [[ $# -gt 0 ]]; do
             echo "不指定選項時，會自動偵測環境："
             echo "  - 在 Docker 容器內：使用 Gunicorn"
             echo "  - 宿主機有 Docker：使用 Docker Compose"
-            echo "  - 宿主機無 Docker：使用本地開發伺服器"
+            echo "  - 宿主機無 Docker：使用本地開發伺伺器"
             exit 0
             ;;
         *)
@@ -62,7 +62,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ==========================================
-# 函數：等待服務就緒
+# 函數：等待伺務就緒
 # ==========================================
 wait_for_service() {
     local service_name=$1
@@ -71,11 +71,11 @@ wait_for_service() {
     local max_attempts=30
     local attempt=1
 
-    echo "⏳ 等待 $service_name 服務就緒 ($host:$port)..."
+    echo "⏳ 等待 $service_name 伺務就緒 ($host:$port)..."
     
     while [ $attempt -le $max_attempts ]; do
         if timeout 1 bash -c "cat < /dev/null > /dev/tcp/$host/$port" 2>/dev/null; then
-            echo "✅ $service_name 服務已就緒"
+            echo "✅ $service_name 伺務已就緒"
             return 0
         fi
         echo "   嘗試 $attempt/$max_attempts..."
@@ -83,7 +83,7 @@ wait_for_service() {
         attempt=$((attempt + 1))
     done
     
-    echo "❌ $service_name 服務啟動超時"
+    echo "❌ $service_name 伺務啟動超時"
     return 1
 }
 
@@ -118,7 +118,7 @@ else
 fi
 
 echo "=========================================="
-echo "   Django 圖片處理服務啟動腳本"
+echo "   Django 圖片處理伺務啟動腳本"
 echo "=========================================="
 echo "   運行模式: $RUN_MODE"
 echo "=========================================="
@@ -133,7 +133,7 @@ ensure_env_file() {
             echo "⚠️  未找到 .env 檔案，從 .env.example 自動複製..."
             cp .env.example .env
             echo "✅ 已建立 .env 檔案（使用預設值）"
-            echo "   如需自訂配置，請編輯 .env 檔案後重新啟動"
+            echo "   如需自訂設定，請編輯 .env 檔案後重新啟動"
         else
             echo "❌ 錯誤：未找到 .env 或 .env.example 檔案"
             exit 1
@@ -154,7 +154,7 @@ check_docker() {
     fi
 
     if ! docker info &> /dev/null; then
-        echo "❌ 錯誤：Docker 未運行，請啟動 Docker 服務"
+        echo "❌ 錯誤：Docker 未運行，請啟動 Docker 伺務"
         exit 1
     fi
 
@@ -186,16 +186,16 @@ start_docker() {
     mkdir -p output logs
 
     # 檢查容器是否已在運行
-    echo "🔍 檢查容器服務狀態..."
+    echo "🔍 檢查容器伺務狀態..."
     DB_RUNNING=$(docker ps 2>/dev/null | grep -q auth_postgres && echo "true" || echo "false")
     MINIO_RUNNING=$(docker ps 2>/dev/null | grep -q minio && echo "true" || echo "false")
     BACKEND_RUNNING=$(docker ps 2>/dev/null | grep -q django-backend && echo "true" || echo "false")
 
     if [ "$DB_RUNNING" = "true" ] && [ "$MINIO_RUNNING" = "true" ] && [ "$BACKEND_RUNNING" = "true" ]; then
-        echo "✅ 所有服務都已在運行"
+        echo "✅ 所有伺務都已在運行"
     else
-        echo "⚠️  檢測到服務未運行，正在啟動所有容器..."
-        echo "📦 構建並啟動所有服務（PostgreSQL + MinIO + Django Backend）..."
+        echo "⚠️  檢測到伺務未運行，正在啟動所有容器..."
+        echo "📦 構建並啟動所有伺務（PostgreSQL + MinIO + Django Backend）..."
         $COMPOSE_CMD up --build -d
 
         if [ $? -eq 0 ]; then
@@ -204,7 +204,7 @@ start_docker() {
 
             # 驗證容器狀態
             echo ""
-            echo "🔍 驗證服務狀態..."
+            echo "🔍 驗證伺務狀態..."
             if docker ps | grep -q auth_postgres; then
                 echo "   ✅ PostgreSQL 數據庫: 運行中 (port 9090)"
             else
@@ -232,14 +232,14 @@ start_docker() {
 
     # 等待後端健康檢查
     echo ""
-    echo "🏥 等待 Django 服務就緒..."
+    echo "🏥 等待 Django 伺務就緒..."
     for i in $(seq 1 30); do
         if curl -sf http://localhost:30000/health > /dev/null 2>&1; then
             echo "✅ 健康檢查通過！"
             break
         fi
         if [ $i -eq 30 ]; then
-            echo "⚠️  健康檢查超時，服務可能仍在啟動中"
+            echo "⚠️  健康檢查超時，伺務可能仍在啟動中"
             echo "   請稍後手動檢查: curl http://localhost:30000/health"
         fi
         sleep 2
@@ -247,10 +247,10 @@ start_docker() {
 
     echo ""
     echo "=========================================="
-    echo "   🎉 所有服務已啟動！"
+    echo "   🎉 所有伺務已啟動！"
     echo "=========================================="
     echo ""
-    echo "   📡 服務地址："
+    echo "   📡 伺務地址："
     echo "   Django 後端:   http://localhost:30000"
     echo "   圖片上傳:     http://localhost:30000/picture/clothes/upload_image"
     echo "   MinIO API:     http://localhost:9000"
@@ -260,8 +260,8 @@ start_docker() {
     echo "   📝 常用命令："
     echo "   查看日誌:      $COMPOSE_CMD logs -f"
     echo "   查看後端日誌:  $COMPOSE_CMD logs -f backend"
-    echo "   停止服務:      ./stop.sh"
-    echo "   重啟服務:      ./stop.sh && ./start.sh"
+    echo "   停止伺務:      ./stop.sh"
+    echo "   重啟伺務:      ./stop.sh && ./start.sh"
     echo "   查看容器狀態:  $COMPOSE_CMD ps"
     echo "   進入數據庫:    docker exec -it auth_postgres psql -U auth_user -d auth_db"
     echo ""
@@ -317,7 +317,7 @@ start_local() {
         echo "🐳 偵測到 Docker，啟動 PostgreSQL 和 MinIO 容器..."
         check_docker
         $COMPOSE_CMD up -d db minio
-        echo "⏳ 等待數據庫服務就緒..."
+        echo "⏳ 等待數據庫伺務就緒..."
         sleep 5
         wait_for_service "PostgreSQL" "localhost" "9090"
     else
@@ -382,11 +382,11 @@ start_local() {
 
     # 啟動 Django 應用
     echo ""
-    echo "🚀 啟動 Django 開發伺服器..."
+    echo "🚀 啟動 Django 開發伺伺器..."
     nohup python3 manage.py runserver 0.0.0.0:30000 > logs/app.log 2>&1 &
     APP_PID=$!
 
-    # 等待服務啟動
+    # 等待伺務啟動
     sleep 3
 
     # 檢查進程是否還在運行
@@ -394,7 +394,7 @@ start_local() {
         echo "✅ 應用已啟動！"
         echo "   進程 ID: $APP_PID"
         echo "   日誌檔案: logs/app.log"
-        echo "   服務地址: http://localhost:30000"
+        echo "   伺務地址: http://localhost:30000"
         echo "   圖片上傳: http://localhost:30000/picture/clothes/upload_image"
 
         # 執行健康檢查
@@ -415,16 +415,16 @@ start_local() {
 
     echo ""
     echo "=========================================="
-    echo "   🎉 本地開發伺服器已啟動！"
+    echo "   🎉 本地開發伺伺器已啟動！"
     echo "=========================================="
     echo ""
     echo "   📝 常用命令："
     echo "   查看日誌:     tail -f logs/app.log"
-    echo "   停止服務:     ./stop.sh"
+    echo "   停止伺務:     ./stop.sh"
     echo "   健康檢查:     curl http://localhost:30000/health"
-    echo "   重啟服務:     ./stop.sh && ./start.sh --local"
+    echo "   重啟伺務:     ./stop.sh && ./start.sh --local"
     echo ""
-    echo "   💡 提示：這是開發伺服器，不適合生產環境"
+    echo "   💡 提示：這是開發伺伺器，不適合生產環境"
     echo ""
     echo "=========================================="
 }
@@ -458,7 +458,7 @@ except Exception as e:
 " 2>/dev/null; do
         RETRY=$((RETRY + 1))
         if [ $RETRY -ge $MAX_RETRIES ]; then
-            echo "❌ 數據庫連線超時，請檢查 PostgreSQL 服務"
+            echo "❌ 數據庫連線超時，請檢查 PostgreSQL 伺務"
             exit 1
         fi
         echo "   重試 $RETRY/$MAX_RETRIES..."
@@ -495,11 +495,11 @@ PYTHON_SCRIPT
     echo ""
     if [ "${DJANGO_DEV_MODE}" = "true" ]; then
         echo "🔧 開發模式：Hot Reload 已啟用"
-        echo "🚀 啟動 Django 開發伺服器 (port 30000)..."
+        echo "🚀 啟動 Django 開發伺伺器 (port 30000)..."
         exec python3 manage.py runserver 0.0.0.0:30000
     else
         echo "🚀 生產模式：使用 Gunicorn"
-        echo "🚀 啟動 Gunicorn 伺服器 (port 30000)..."
+        echo "🚀 啟動 Gunicorn 伺伺器 (port 30000)..."
         exec gunicorn config.wsgi:application \
             --bind 0.0.0.0:30000 \
             --workers 4 \
@@ -538,8 +538,8 @@ if [ "$RUN_TEST" = true ]; then
     echo "=========================================="
     echo ""
     
-    # 等待服務完全啟動
-    echo "⏳ 等待服務完全啟動..."
+    # 等待伺務完全啟動
+    echo "⏳ 等待伺務完全啟動..."
     sleep 3
     
     BASE_URL="http://localhost:30000/account/user"

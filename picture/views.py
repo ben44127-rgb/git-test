@@ -58,13 +58,13 @@ def get_minio_client():
     如果連接失敗，會返回 None
     
     重要：這個函數會在每次上傳時被呼叫，而不是在模組載入時
-    這樣可以確保 MinIO 服務可用時能夠正常連接，
-    即使在容器啟動時 MinIO 服務還未就緒
+    這樣可以確保 MinIO 伺務可用時能夠正常連接，
+    即使在容器啟動時 MinIO 伺務還未就緒
     """
     try:
         # 建立 MinIO 客戶端物件
         client = Minio(
-            settings.MINIO_ENDPOINT,           # MinIO 伺服器位址
+            settings.MINIO_ENDPOINT,           # MinIO 伺伺器位址
             access_key=settings.MINIO_ACCESS_KEY,  # 存取金鑰
             secret_key=settings.MINIO_SECRET_KEY,  # 秘密金鑰
             secure=settings.MINIO_SECURE       # 是否使用 HTTPS
@@ -79,7 +79,7 @@ def get_minio_client():
         else:
             logger.info(f"✅ Bucket 已存在：{settings.MINIO_BUCKET_NAME}")
         
-        # 設定 Bucket CORS 配置，允許前端跨域訪問圖片
+        # 設定 Bucket CORS 設定，允許前端跨域訪問圖片
         try:
             from minio.commonconfig import CORSConfig
             cors_config = CORSConfig(
@@ -93,7 +93,7 @@ def get_minio_client():
                 ]
             )
             client.set_bucket_cors(settings.MINIO_BUCKET_NAME, cors_config)
-            logger.info(f"✅ 已設定 Bucket CORS 配置")
+            logger.info(f"✅ 已設定 Bucket CORS 設定")
         except Exception as cors_error:
             logger.warning(f"⚠️  設定 CORS 失敗（可能已設定）：{cors_error}")
         
@@ -121,7 +121,7 @@ def get_minio_client():
     except Exception as e:
         # 如果連接失敗，記錄錯誤日誌並返回 None
         logger.error(f"❌ MinIO 初始化失敗：{e}")
-        logger.error(f"   提示：請確認 MinIO 服務是否啟動，以及帳號密碼是否正確")
+        logger.error(f"   提示：請確認 MinIO 伺務是否啟動，以及帳號密碼是否正確")
         return None
 
 # ==========================================
@@ -131,7 +131,7 @@ def get_minio_client():
 def health_check(request):
     """
     健康檢查端點
-    用來檢查服務是否正常運行
+    用來檢查伺務是否正常運行
     
     請求方式：GET
     存取位址：http://localhost:30000/health
@@ -139,13 +139,13 @@ def health_check(request):
     返回範例：
     {
         "status": "healthy",
-        "message": "服務運行正常"
+        "message": "伺務運行正常"
     }
     """
     # 建立響應資料
     response_data = {
         "status": "healthy",
-        "message": "服務運行正常"
+        "message": "伺務運行正常"
     }
     
     # 返回 JSON 響應
@@ -162,11 +162,11 @@ def upload_and_process(request):
     處理圖片上傳和 AI 去背的主要視圖函數
 
     完整流程：
-    1. 接收前端上傳的圖片和衣服尺寸參數（multipart/form-data）
-    2. 將圖片和衣服尺寸參數轉發給 AI 後端（virtual_try_on/clothes/remove_bg）
+    1. 接收前端上傳的圖片和衣伺尺寸參數（multipart/form-data）
+    2. 將圖片和衣伺尺寸參數轉發給 AI 後端（virtual_try_on/clothes/remove_bg）
     3. 解析 AI 返回的 multipart 回應（JSON 元數據 + 去背圖片）
     4. 使用 AI 回傳的 file_name / file_format 將圖片儲存到 MinIO
-    5. 將 clothes_category、style_name（3筆）、color_name（3筆）和衣服尺寸存入資料庫
+    5. 將 clothes_category、style_name（3筆）、color_name（3筆）和衣伺尺寸存入資料庫
     6. 返回完整的狀態資訊給前端
 
     請求方式：POST
@@ -175,10 +175,10 @@ def upload_and_process(request):
 
     請求參數：
     - image_data: 圖片檔案（multipart/form-data 格式）必填
-    - clothes_arm_length: 衣服袖長（cm，整數，0-200）可選，默認0
-    - clothes_leg_length: 衣服褲長（cm，整數，0-150）可選，默認0
-    - clothes_shoulder_width: 衣服肩寬（cm，整數，0-200）可選，默認0
-    - clothes_waistline: 衣服腰圍（cm，整數，0-300）可選，默認0
+    - clothes_arm_length: 衣伺袖長（cm，整數，0-200）可選，預認0
+    - clothes_leg_length: 衣伺褲長（cm，整數，0-150）可選，預認0
+    - clothes_shoulder_width: 衣伺肩寬（cm，整數，0-200）可選，預認0
+    - clothes_waistline: 衣伺腰圍（cm，整數，0-300）可選，預認0
     - user_uid: 用戶 UID（字串，若有 JWT Token 則可省略）
 
     AI 後端位址：http://192.168.233.128:8002/virtual_try_on/clothes/remove_bg
@@ -278,7 +278,7 @@ def upload_and_process(request):
     logger.info(f"👤 用戶 UID：{user_uid}")
 
     # ==========================================
-    # 【步驟 1.6】提取衣服尺寸參數
+    # 【步驟 1.6】提取衣伺尺寸參數
     # ==========================================
     clothes_arm_length = request.POST.get('clothes_arm_length', 0)
     clothes_leg_length = request.POST.get('clothes_leg_length', 0)
@@ -292,11 +292,11 @@ def upload_and_process(request):
         clothes_shoulder_width = int(clothes_shoulder_width) if clothes_shoulder_width else 0
         clothes_waistline = int(clothes_waistline) if clothes_waistline else 0
     except ValueError as e:
-        logger.error(f"❌ 衣服尺寸參數格式錯誤：{e}")
+        logger.error(f"❌ 衣伺尺寸參數格式錯誤：{e}")
         return JsonResponse(
             {
                 "success": False,
-                "message": "衣服尺寸參數必須為整數"
+                "message": "衣伺尺寸參數必須為整數"
             },
             status=400
         )
@@ -306,7 +306,7 @@ def upload_and_process(request):
         return JsonResponse(
             {
                 "success": False,
-                "message": "衣服袖長必須在 0 到 200 cm 之間"
+                "message": "衣伺袖長必須在 0 到 200 cm 之間"
             },
             status=400
         )
@@ -314,7 +314,7 @@ def upload_and_process(request):
         return JsonResponse(
             {
                 "success": False,
-                "message": "衣服褲長必須在 0 到 150 cm 之間"
+                "message": "衣伺褲長必須在 0 到 150 cm 之間"
             },
             status=400
         )
@@ -322,7 +322,7 @@ def upload_and_process(request):
         return JsonResponse(
             {
                 "success": False,
-                "message": "衣服肩寬必須在 0 到 200 cm 之間"
+                "message": "衣伺肩寬必須在 0 到 200 cm 之間"
             },
             status=400
         )
@@ -330,12 +330,12 @@ def upload_and_process(request):
         return JsonResponse(
             {
                 "success": False,
-                "message": "衣服腰圍必須在 0 到 300 cm 之間"
+                "message": "衣伺腰圍必須在 0 到 300 cm 之間"
             },
             status=400
         )
 
-    logger.info(f"👕 衣服尺寸參數：")
+    logger.info(f"👕 衣伺尺寸參數：")
     logger.info(f"   袖長（arm_length）：{clothes_arm_length} cm")
     logger.info(f"   褲長（leg_length）：{clothes_leg_length} cm")
     logger.info(f"   肩寬（shoulder_width）：{clothes_shoulder_width} cm")
@@ -365,12 +365,12 @@ def upload_and_process(request):
 
     try:
         # 準備發送給 AI 後端的資料
-        # 包含 clothes_image 和衣服尺寸參數
+        # 包含 clothes_image 和衣伺尺寸參數
         files = {
             'clothes_image': (image_file.name, file_bytes, image_file.content_type)
         }
 
-        # 準備 data 字典（衣服尺寸和其他參數）
+        # 準備 data 字典（衣伺尺寸和其他參數）
         data = {
             'clothes_arm_length': clothes_arm_length,
             'clothes_leg_length': clothes_leg_length,
@@ -381,7 +381,7 @@ def upload_and_process(request):
 
         logger.info(f"📤 發送給 AI 後端的參數：{json.dumps(data, ensure_ascii=False)}")
 
-        # 發送 POST 請求給 AI 後端（衣服去背處理）
+        # 發送 POST 請求給 AI 後端（衣伺去背處理）
         # 使用 settings 中的完整 URL（自動拼接 AI_BACKEND_URL + AI_CLOTHES_REMOVE_BG_ENDPOINT）
         ai_remove_bg_url = settings.AI_CLOTHES_REMOVE_BG_URL
         logger.info(f"🔗 完整 AI 端點 URL：{ai_remove_bg_url}")
@@ -533,7 +533,7 @@ def upload_and_process(request):
 
         logger.info(f"   AI 指定檔案名稱：{file_name}")
         logger.info(f"   AI 指定檔案格式：{file_format}")
-        logger.info(f"   衣服類別：{clothes_category}")
+        logger.info(f"   衣伺類別：{clothes_category}")
         logger.info(f"   風格列表（{len(style_names)} 筆）：{style_names}")
         logger.info(f"   顏色列表（{len(color_names)} 筆）：{color_names}")
         logger.info(f"   工具狀態：{tools_status}")
@@ -556,10 +556,10 @@ def upload_and_process(request):
         return JsonResponse(
             {
                 "success": False,
-                "message": "無法連接到 AI 服務",
+                "message": "無法連接到 AI 伺務",
                 "ai_status": {
                     "status_code": 503,
-                    "message": "服務不可用"
+                    "message": "伺務不可用"
                 }
             },
             status=503
@@ -569,7 +569,7 @@ def upload_and_process(request):
         return JsonResponse(
             {
                 "success": False,
-                "message": f"AI 服務呼叫失敗：{str(e)}",
+                "message": f"AI 伺務呼叫失敗：{str(e)}",
                 "ai_status": {
                     "status_code": 500,
                     "message": str(e)
@@ -634,7 +634,7 @@ def upload_and_process(request):
     unique_id = uuid.uuid4().hex[:8]
     base_name = file_name.rsplit('.', 1)[0] if '.' in file_name else file_name
     # ==========================================
-    # 修改：衣服圖片放在 clothes/processed 資料夾下
+    # 修改：衣伺圖片放在 clothes/processed 資料夾下
     # ==========================================
     unique_filename = f"clothes/processed/{unique_id}_{base_name}{format_info['ext']}"
     logger.info(f"   去背圖片 MinIO 檔案名稱（含資料夾）：{unique_filename}")
@@ -647,7 +647,7 @@ def upload_and_process(request):
         return JsonResponse(
             {
                 "success": False,
-                "message": "儲存服務不可用",
+                "message": "儲存伺務不可用",
                 "ai_status": {
                     "status_code": 200,
                     "message": "去背成功",
@@ -655,7 +655,7 @@ def upload_and_process(request):
                 },
                 "storage_status": {
                     "success": False,
-                    "message": "MinIO 服務不可用"
+                    "message": "MinIO 伺務不可用"
                 }
             },
             status=503
@@ -757,7 +757,7 @@ def upload_and_process(request):
     try:
         clothes_uid = str(uuid.uuid4())
 
-        # 建立 Clothes 記錄（包含衣服尺寸和原始圖片URL）
+        # 建立 Clothes 記錄（包含衣伺尺寸和原始圖片URL）
         clothes = Clothes.objects.create(
             f_user_uid=user_uid,
             clothes_uid=clothes_uid,
@@ -769,7 +769,7 @@ def upload_and_process(request):
             clothes_shoulder_width=clothes_shoulder_width,
             clothes_waistline=clothes_waistline,
         )
-        logger.info(f"✅ 建立衣服記錄：clothes_uid={clothes_uid}, category={clothes_category}")
+        logger.info(f"✅ 建立衣伺記錄：clothes_uid={clothes_uid}, category={clothes_category}")
         logger.info(f"   去背圖片 URL：{image_url[:80]}...")
         logger.info(f"   原始圖片 URL：{(original_image_url or '無')[:80]}...")
         logger.info(f"   尺寸：袖長={clothes_arm_length}cm, 褲長={clothes_leg_length}cm, 肩寬={clothes_shoulder_width}cm, 腰圍={clothes_waistline}cm")
@@ -796,7 +796,7 @@ def upload_and_process(request):
             created_colors.append(color_name)
             logger.info(f"✅ 建立顏色記錄：{color_name} → clothes_uid={clothes_uid}")
 
-        logger.info(f"✅ 資料庫儲存完成：1 筆衣服、{len(created_styles)} 筆風格、{len(created_colors)} 筆顏色")
+        logger.info(f"✅ 資料庫儲存完成：1 筆衣伺、{len(created_styles)} 筆風格、{len(created_colors)} 筆顏色")
 
     except Exception as e:
         logger.error(f"❌ 資料庫儲存失敗：{e}")
@@ -863,7 +863,7 @@ def upload_and_process(request):
 
 
 # ==========================================
-# 【衣服管理 CRUD API】
+# 【衣伺管理 CRUD API】
 # ==========================================
 
 from rest_framework.decorators import api_view, permission_classes
@@ -881,10 +881,10 @@ import uuid
 @permission_classes([IsAuthenticated])
 def user_clothes_list(request):
     """
-    用戶衣服列表端點
+    用戶衣伺列表端點
     
-    GET: 獲取當前用戶的衣服列表
-         如果用戶為管理員，可查看所有衣服
+    GET: 獲取當前用戶的衣伺列表
+         如果用戶為管理員，可查看所有衣伺
     
     Query Parameters:
         - category: 按分類篩選
@@ -896,7 +896,7 @@ def user_clothes_list(request):
         "count": 10,
         "total_pages": 1,
         "current_page": 1,
-        "results": [{衣服詳情}, ...]
+        "results": [{衣伺詳情}, ...]
     }
     """
     try:
@@ -907,15 +907,15 @@ def user_clothes_list(request):
         
         # 構建查詢 - 根據用戶身份決定查詢範圍
         if request.user.is_staff or request.user.is_superuser:
-            # 管理員可以查看所有衣服
+            # 管理員可以查看所有衣伺
             queryset = Clothes.objects.all().order_by('-clothes_created_time')
-            logger.info(f"✅ 管理員 {request.user.user_name} 查看所有衣服")
+            logger.info(f"✅ 管理員 {request.user.user_name} 查看所有衣伺")
         else:
-            # 普通用戶只能查看自己的衣服
+            # 普通用戶只能查看自己的衣伺
             queryset = Clothes.objects.filter(
                 f_user_uid=str(request.user.user_uid)
             ).order_by('-clothes_created_time')
-            logger.info(f"✅ 用戶 {request.user.user_name} 查看自己的衣服")
+            logger.info(f"✅ 用戶 {request.user.user_name} 查看自己的衣伺")
         
         # 按分類篩選
         if category:
@@ -936,7 +936,7 @@ def user_clothes_list(request):
         }, status=status.HTTP_200_OK)
     
     except Exception as e:
-        logger.error(f"❌ 獲取衣服列表失敗: {str(e)}")
+        logger.error(f"❌ 獲取衣伺列表失敗: {str(e)}")
         return Response(
             {'detail': f'獲取失敗: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -947,9 +947,9 @@ def user_clothes_list(request):
 @permission_classes([IsAuthenticated])
 def favorites_list(request):
     """
-    用戶喜歡的衣服列表端點
+    用戶喜歡的衣伺列表端點
     
-    GET: 獲取當前用戶標註為喜歡的所有衣服
+    GET: 獲取當前用戶標註為喜歡的所有衣伺
     
     Query Parameters:
         - page: 頁碼 (預設 1)
@@ -960,7 +960,7 @@ def favorites_list(request):
         "count": 5,
         "total_pages": 1,
         "current_page": 1,
-        "results": [{衣服詳情}, ...]
+        "results": [{衣伺詳情}, ...]
     }
     """
     try:
@@ -968,12 +968,12 @@ def favorites_list(request):
         page = request.query_params.get('page', 1)
         limit = request.query_params.get('limit', 20)
         
-        # 查詢當前用戶標註為喜歡的衣服
+        # 查詢當前用戶標註為喜歡的衣伺
         queryset = Clothes.objects.filter(
             clothes_favorite=True
         ).order_by('-clothes_updated_time')
         
-        logger.info(f"✅ 用戶 {request.user.user_name} 查看喜歡的衣服，共 {queryset.count()} 件")
+        logger.info(f"✅ 用戶 {request.user.user_name} 查看喜歡的衣伺，共 {queryset.count()} 件")
         
         # 分頁
         paginator = Paginator(queryset, int(limit))
@@ -990,7 +990,7 @@ def favorites_list(request):
         }, status=status.HTTP_200_OK)
     
     except Exception as e:
-        logger.error(f"❌ 獲取喜歡的衣服列表失敗: {str(e)}")
+        logger.error(f"❌ 獲取喜歡的衣伺列表失敗: {str(e)}")
         return Response(
             {'detail': f'獲取失敗: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1001,9 +1001,9 @@ def favorites_list(request):
 @permission_classes([IsAuthenticated])
 def toggle_favorite(request, clothes_uid):
     """
-    標記/取消標記衣服為喜歡的端點
+    標記/取消標記衣伺為喜歡的端點
     
-    PATCH: 切換衣服的喜歡狀態（favorite = !favorite）
+    PATCH: 切換衣伺的喜歡狀態（favorite = !favorite）
     
     Body (JSON):
     {
@@ -1019,7 +1019,7 @@ def toggle_favorite(request, clothes_uid):
     }
     """
     try:
-        # 獲取衣服
+        # 獲取衣伺
         clothes = get_object_or_404(Clothes, clothes_uid=clothes_uid)
         
         # 從請求體獲取喜歡狀態
@@ -1048,9 +1048,9 @@ def toggle_favorite(request, clothes_uid):
         }, status=status.HTTP_200_OK)
     
     except Clothes.DoesNotExist:
-        logger.warning(f"❌ 衣服不存在: {clothes_uid}")
+        logger.warning(f"❌ 衣伺不存在: {clothes_uid}")
         return Response(
-            {'detail': '衣服不存在'},
+            {'detail': '衣伺不存在'},
             status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
@@ -1065,16 +1065,16 @@ def toggle_favorite(request, clothes_uid):
 @permission_classes([IsAuthenticated])
 def clothes_detail(request, clothes_uid):
     """
-    衣服詳情端點
+    衣伺詳情端點
     
-    GET: 獲取衣服詳情 (所有認證用戶皆可)
-    PUT: 更新衣服 (只有衣服擁有者或管理員可更新)
-    DELETE: 刪除衣服 (只有衣服擁有者或管理員可刪除)
+    GET: 獲取衣伺詳情 (所有認證用戶皆可)
+    PUT: 更新衣伺 (只有衣伺擁有者或管理員可更新)
+    DELETE: 刪除衣伺 (只有衣伺擁有者或管理員可刪除)
     
     URL: /picture/clothes/<clothes_uid>/
     """
     
-    # 獲取衣服
+    # 獲取衣伺
     clothes = get_object_or_404(Clothes, clothes_uid=clothes_uid)
     
     if request.method == 'GET':
@@ -1082,20 +1082,20 @@ def clothes_detail(request, clothes_uid):
             serializer = ClothesDetailSerializer(clothes)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
-            logger.error(f"❌ 獲取衣服詳情失敗: {str(e)}")
+            logger.error(f"❌ 獲取衣伺詳情失敗: {str(e)}")
             return Response(
                 {'detail': f'獲取失敗: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
     elif request.method == 'PUT':
-        # 檢查權限 - 只有衣服擁有者或管理員才能更新
+        # 檢查權限 - 只有衣伺擁有者或管理員才能更新
         is_owner = str(clothes.f_user_uid) == str(request.user.user_uid)
         is_admin = request.user.is_staff or request.user.is_superuser
         
         if not (is_owner or is_admin):
             return Response(
-                {'detail': '只有衣服擁有者或管理員才能更新此衣服'},
+                {'detail': '只有衣伺擁有者或管理員才能更新此衣伺'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
@@ -1108,7 +1108,7 @@ def clothes_detail(request, clothes_uid):
             )
         
         try:
-            # 更新衣服基本信息
+            # 更新衣伺基本信息
             clothes.clothes_category = serializer.validated_data.get(
                 'clothes_category',
                 clothes.clothes_category
@@ -1155,9 +1155,9 @@ def clothes_detail(request, clothes_uid):
                         style_name=style_name
                     )
             
-            logger.info(f"✅ 用戶 {request.user.user_name} 更新衣服: {clothes.clothes_uid}")
+            logger.info(f"✅ 用戶 {request.user.user_name} 更新衣伺: {clothes.clothes_uid}")
             
-            # 返回更新的衣服
+            # 返回更新的衣伺
             output_serializer = ClothesDetailSerializer(clothes)
             return Response(
                 output_serializer.data,
@@ -1165,20 +1165,20 @@ def clothes_detail(request, clothes_uid):
             )
         
         except Exception as e:
-            logger.error(f"❌ 更新衣服失敗: {str(e)}")
+            logger.error(f"❌ 更新衣伺失敗: {str(e)}")
             return Response(
                 {'detail': f'更新失敗: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
     elif request.method == 'DELETE':
-        # 檢查權限 - 只有衣服擁有者或管理員才能刪除
+        # 檢查權限 - 只有衣伺擁有者或管理員才能刪除
         is_owner = str(clothes.f_user_uid) == str(request.user.user_uid)
         is_admin = request.user.is_staff or request.user.is_superuser
         
         if not (is_owner or is_admin):
             return Response(
-                {'detail': '只有衣服擁有者或管理員才能刪除此衣服'},
+                {'detail': '只有衣伺擁有者或管理員才能刪除此衣伺'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
@@ -1190,18 +1190,18 @@ def clothes_detail(request, clothes_uid):
             Color.objects.filter(f_clothes_uid=clothes_uid).delete()
             Style.objects.filter(f_clothes_uid=clothes_uid).delete()
             
-            # 刪除衣服
+            # 刪除衣伺
             clothes.delete()
             
-            logger.info(f"✅ 用戶 {request.user.user_name} 刪除衣服: {clothes_uid}")
+            logger.info(f"✅ 用戶 {request.user.user_name} 刪除衣伺: {clothes_uid}")
             
             return Response(
-                {'detail': '衣服已刪除'},
+                {'detail': '衣伺已刪除'},
                 status=status.HTTP_200_OK
             )
         
         except Exception as e:
-            logger.error(f"❌ 刪除衣服失敗: {str(e)}")
+            logger.error(f"❌ 刪除衣伺失敗: {str(e)}")
             return Response(
                 {'detail': f'刪除失敗: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1295,7 +1295,7 @@ def user_photo(request):
     - 400 Bad Request: 未提供 photo_file 或格式/大小不符
     - 401 Unauthorized: 未提供 JWT Token 或 Token 無效
     - 403 Forbidden: 無法修改他人的照片
-    - 500 Internal Server Error: 伺服器錯誤
+    - 500 Internal Server Error: 伺伺器錯誤
     """
     
     # ==========================================
@@ -1370,7 +1370,7 @@ def user_photo(request):
         # 【步驟 5】轉發給 AI 後端進行去背處理（模特照片）
         logger.info("🤖 準備轉發給 AI 後端進行去背處理...")
         
-        # 重新建立文件對象供 AI 後端使用
+        # 重新建立檔案對象供 AI 後端使用
         photo_file.seek(0)
         
         # 決定副檔名和 content_type
@@ -1385,7 +1385,7 @@ def user_photo(request):
             {'ext': '.jpg', 'content_type': 'image/jpeg'}
         )
         
-        # 準備發送給 AI 後端的文件
+        # 準備發送給 AI 後端的檔案
         files = {
             'model_image': (f'model_image{format_info["ext"]}', io.BytesIO(file_bytes), photo_file.content_type)
         }
@@ -1416,7 +1416,7 @@ def user_photo(request):
             return Response(
                 {
                     'success': False,
-                    'message': 'AI 後端服務不可用'
+                    'message': 'AI 後端伺務不可用'
                 },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
@@ -1516,11 +1516,11 @@ def user_photo(request):
         
         logger.info(f"✅ 成功解析 AI 回應：JSON 元數據 + 圖片二進制數據")
         
-        # 【步驟 8】提取 AI 回傳的文件名和格式
+        # 【步驟 8】提取 AI 回傳的檔案名和格式
         ai_file_name = json_data.get('data', {}).get('file_name', f'model_photo_{user_uid}.png')
         ai_file_format = json_data.get('data', {}).get('file_format', 'PNG')
-        logger.info(f"   AI 返回的文件名：{ai_file_name}")
-        logger.info(f"   AI 返回的文件格式：{ai_file_format}")
+        logger.info(f"   AI 返回的檔案名：{ai_file_name}")
+        logger.info(f"   AI 返回的檔案格式：{ai_file_format}")
         
         # 決定最終的副檔名
         if ai_file_format.upper() == 'PNG':
@@ -1555,7 +1555,7 @@ def user_photo(request):
             return Response(
                 {
                     'success': False,
-                    'message': '儲存服務不可用'
+                    'message': '儲存伺務不可用'
                 },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
@@ -1822,7 +1822,7 @@ def user_photo(request):
         # 【步驟 5】轉發給 AI 後端進行去背處理（模特照片）
         logger.info("🤖 準備轉發給 AI 後端進行去背處理...")
         
-        # 重新建立文件對象供 AI 後端使用
+        # 重新建立檔案對象供 AI 後端使用
         photo_file.seek(0)
         
         # 決定副檔名和 content_type
@@ -1837,7 +1837,7 @@ def user_photo(request):
             {'ext': '.jpg', 'content_type': 'image/jpeg'}
         )
         
-        # 準備發送給 AI 後端的文件
+        # 準備發送給 AI 後端的檔案
         files = {
             'model_image': (f'model_image{format_info["ext"]}', io.BytesIO(file_bytes), photo_file.content_type)
         }
@@ -1867,7 +1867,7 @@ def user_photo(request):
             return Response(
                 {
                     'success': False,
-                    'message': 'AI 後端服務不可用'
+                    'message': 'AI 後端伺務不可用'
                 },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
@@ -1963,11 +1963,11 @@ def user_photo(request):
         
         logger.info(f"✅ 成功解析 AI 回應：JSON 元數據 + 圖片二進制數據")
         
-        # 【步驟 8】提取 AI 回傳的文件名和格式
+        # 【步驟 8】提取 AI 回傳的檔案名和格式
         ai_file_name = json_data.get('data', {}).get('file_name', f'model_photo_{user_uid}.png')
         ai_file_format = json_data.get('data', {}).get('file_format', 'PNG')
-        logger.info(f"   AI 返回的文件名：{ai_file_name}")
-        logger.info(f"   AI 返回的文件格式：{ai_file_format}")
+        logger.info(f"   AI 返回的檔案名：{ai_file_name}")
+        logger.info(f"   AI 返回的檔案格式：{ai_file_format}")
         
         # 決定最終的副檔名
         if ai_file_format.upper() == 'PNG':
@@ -1993,7 +1993,7 @@ def user_photo(request):
             return Response(
                 {
                     'success': False,
-                    'message': '儲存服務不可用'
+                    'message': '儲存伺務不可用'
                 },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )

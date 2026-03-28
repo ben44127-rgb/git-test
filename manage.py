@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 
-# 提前載入環境變數，確保所有 Django 命令都能使用 .env 中的配置
+# 提前載入環境變數，確保所有 Django 命令都能使用 .env 中的設定
 try:
     from dotenv import load_dotenv
     # 找到專案根目錄的 .env 檔案

@@ -1,1 +1,1 @@
-# Django 项目配置包
+# Django 項目設定包

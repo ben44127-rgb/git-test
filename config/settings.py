@@ -1,6 +1,6 @@
 """
 Django settings for image processing backend.
-Django 圖像處理後端的設定配置檔案
+Django 圖像處理後端的設定設定檔案
 """
 import os
 from pathlib import Path
@@ -30,7 +30,7 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-this-in-prod
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 # 允許的主機清單
-# 从环境变量读取，格式: 逗号分隔的主机列表
+# 從環境變量读取，格式: 逗號分隔的主機列表
 # 例如: DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,django-backend,35.201.135.229
 default_hosts = 'localhost,127.0.0.1,0.0.0.0,django-backend'
 allowed_hosts_str = os.getenv('DJANGO_ALLOWED_HOSTS', default_hosts)
@@ -55,7 +55,7 @@ INSTALLED_APPS = [
     'combine',                       # 穿搭與虛擬試穿應用
 ]
 
-# 中間件配置
+# 中間件設定
 # 中間件是處理請求和響應的鉤子
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',      # 安全中間件
@@ -68,10 +68,10 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',  # 點擊劫持保護
 ]
 
-# URL 配置
+# URL 設定
 ROOT_URLCONF = 'config.urls'
 
-# 範本配置
+# 範本設定
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -88,11 +88,11 @@ TEMPLATES = [
     },
 ]
 
-# WSGI 應用配置
+# WSGI 應用設定
 WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
-# 資料庫配置 - 使用 PostgreSQL 存儲用戶數據
+# 資料庫設定 - 使用 PostgreSQL 存儲用戶數據
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -105,7 +105,7 @@ DATABASES = {
 }
 
 # Password validation
-# 密碼驗證（本應用不涉及使用者認證，保留預設配置）
+# 密碼驗證（本應用不涉及使用者認證，保留預設設定）
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -122,14 +122,14 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # Internationalization
-# 國際化配置
+# 國際化設定
 LANGUAGE_CODE = 'zh-hans'  # 簡體中文
 TIME_ZONE = 'Asia/Shanghai'  # 上海時區
 USE_I18N = True
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
-# 靜態檔案配置
+# 靜態檔案設定
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
@@ -138,19 +138,19 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ============================================
-# 前端配置（用於 CORS 和重定向）
+# 前端設定（用於 CORS 和重定向）
 # ============================================
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
 
 # ============================================
-# CORS (跨域資源共享) 配置
+# CORS (跨域資源共享) 設定
 # ============================================
 # 根據環境變數決定是否允許所有來源
 CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'False') == 'True'
 
 # CORS 白名單（前端地址）
 # 格式: 逗號分隔的 URL 列表
-cors_origins_str = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173')
+cors_origins_str = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://localhost:8080,http://localhost:8002,http://127.0.0.1:5173,http://frontend:5173,http://try_on:8002,http://0.0.0.0:5173')
 CORS_ALLOWED_ORIGINS = [url.strip() for url in cors_origins_str.split(',') if url.strip()]
 
 # 允許攜帶認證資訊（如 cookies）
@@ -180,7 +180,7 @@ CORS_ALLOW_HEADERS = [
 ]
 
 # ============================================
-# REST Framework 配置
+# REST Framework 設定
 # ============================================
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -192,7 +192,7 @@ REST_FRAMEWORK = {
 }
 
 # ============================================
-# Simple JWT 配置
+# Simple JWT 設定
 # ============================================
 from datetime import timedelta
 
@@ -208,9 +208,9 @@ SIMPLE_JWT = {
 }
 
 # ============================================
-# 自定義配置：MinIO 和 AI 後端
+# 自定義設定：MinIO 和 AI 後端
 # ============================================
-# MinIO 物件儲存配置
+# MinIO 物件儲存設定
 MINIO_ENDPOINT = os.getenv('MINIO_ENDPOINT', 'localhost:9000')
 MINIO_CONTAINER_ENDPOINT = os.getenv('MINIO_CONTAINER_ENDPOINT', 'minio:9000')
 MINIO_ACCESS_KEY = os.getenv('MINIO_ACCESS_KEY', 'minioadmin')
@@ -223,7 +223,7 @@ MINIO_SECURE = os.getenv('MINIO_SECURE', 'False') == 'True'
 MINIO_EXTERNAL_URL = os.getenv('MINIO_EXTERNAL_URL', 'http://localhost:9000')
 
 # ==========================================
-# AI 後端配置（基礎 URL + 具體端點）
+# AI 後端設定（基礎 URL + 具體端點）
 # ==========================================
 # 【重點】AI_BACKEND_URL 是基礎 URL，用戶根據環境手動設置：
 # 
@@ -234,17 +234,16 @@ MINIO_EXTERNAL_URL = os.getenv('MINIO_EXTERNAL_URL', 'http://localhost:9000')
 #   AI_BACKEND_URL=http://172.17.0.1:8002
 #
 # 與組員協作（真實 AI）：
-#   AI_BACKEND_URL=http://[真實AI服務器IP]:8002
+#   AI_BACKEND_URL=http://[真實AI伺務器IP]:8002
 #
 AI_BACKEND_URL = os.getenv(
     'AI_BACKEND_URL', 
-    'http://localhost:8002'  # 預設為本地模擬 AI
 )
 
 # ==========================================
 # AI 後端具體端點（三個關鍵功能）
 # ==========================================
-# 【功能 2.1】衣服去背處理（用戶上傳衣服時調用）
+# 【功能 2.1】衣伺去背處理（用戶上傳衣伺時調用）
 # 完整 URL 會自動拼接為：{AI_BACKEND_URL}/{AI_CLOTHES_REMOVE_BG_ENDPOINT}
 AI_CLOTHES_REMOVE_BG_ENDPOINT = os.getenv(
     'AI_CLOTHES_REMOVE_BG_ENDPOINT',
@@ -268,7 +267,7 @@ AI_VIRTUAL_TRY_ON_FITTING_ENDPOINT = os.getenv(
 # ==========================================
 # 自動生成完整 URL（便於代碼中直接使用）
 # ==========================================
-# 衣服去背完整 URL
+# 衣伺去背完整 URL
 AI_CLOTHES_REMOVE_BG_URL = (
     f"{AI_BACKEND_URL}{AI_CLOTHES_REMOVE_BG_ENDPOINT}"
     if not AI_BACKEND_URL.endswith(AI_CLOTHES_REMOVE_BG_ENDPOINT)
@@ -292,7 +291,7 @@ AI_VIRTUAL_TRY_ON_FITTING_URL = (
 # 向後相容：保留舊的 AI_BACKEND_VIRTUAL_TRY_ON_URL（已廢棄，使用 AI_VIRTUAL_TRY_ON_FITTING_URL 替代）
 AI_BACKEND_VIRTUAL_TRY_ON_URL = AI_VIRTUAL_TRY_ON_FITTING_URL
 
-# 檔案上傳配置
+# 檔案上傳設定
 UPLOAD_FOLDER = BASE_DIR / 'output'
 LOG_FOLDER = BASE_DIR / 'logs'
 
@@ -304,7 +303,7 @@ LOG_FOLDER.mkdir(exist_ok=True)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 
-# 日誌配置
+# 日誌設定
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

@@ -19,7 +19,7 @@ class VirtualTryOnCreateSerializer(serializers.Serializer):
     用於驗證虛擬試衣請求
     
     模特照片直接來自用戶個人檔案的 user_original_image_url
-    衣服圖片直接使用 clothes_original_image_url
+    衣伺圖片直接使用 clothes_original_image_url
     
     返回給前端的預覽圖片：user_image_url（處理後）和 clothes_image_url（去背圖）
     """
@@ -31,39 +31,39 @@ class VirtualTryOnCreateSerializer(serializers.Serializer):
     clothes_ids = serializers.ListField(
         child=serializers.UUIDField(),
         required=True,
-        help_text='虛擬試衣使用的衣服 UUID 列表'
+        help_text='虛擬試衣使用的衣伺 UUID 列表'
     )
     
     def validate(self, data):
         """驗證虛擬試衣請求"""
         clothes_ids = data.get('clothes_ids', [])
 
-        # 3.1 規格：每次試穿必須恰好 2 件衣服
+        # 3.1 規格：每次試穿必須恰好 2 件衣伺
         if len(clothes_ids) != 2:
             raise serializers.ValidationError({
-                'clothes_ids': '虛擬試穿必須恰好包含 2 件衣服'
+                'clothes_ids': '虛擬試穿必須恰好包含 2 件衣伺'
             })
 
-        # 不允許重複選取同一件衣服
+        # 不允許重複選取同一件衣伺
         if len(set(clothes_ids)) != 2:
             raise serializers.ValidationError({
-                'clothes_ids': '不能重複選擇同一件衣服'
+                'clothes_ids': '不能重複選擇同一件衣伺'
             })
 
         request = self.context.get('request')
         if not request or not request.user or not request.user.is_authenticated:
             raise serializers.ValidationError({
-                'detail': '未認證使用者，無法驗證衣服歸屬'
+                'detail': '未認證使用者，無法驗證衣伺歸屬'
             })
 
-        # 檢查衣服是否存在且屬於當前使用者
+        # 檢查衣伺是否存在且屬於當前使用者
         valid_clothes = Clothes.objects.filter(
             clothes_uid__in=clothes_ids,
             f_user_uid=str(request.user.user_uid)
         )
         if valid_clothes.count() != 2:
             raise serializers.ValidationError({
-                'clothes_ids': '衣服不存在或不屬於當前使用者'
+                'clothes_ids': '衣伺不存在或不屬於當前使用者'
             })
         
         return data

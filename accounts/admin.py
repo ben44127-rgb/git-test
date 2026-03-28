@@ -28,7 +28,7 @@ class CustomUserAdmin(BaseUserAdmin):
 
 
 class ClothesAdmin(admin.ModelAdmin):
-    """衣服管理界面"""
+    """衣伺管理界面"""
     list_display = ('clothes_id', 'f_user_uid', 'clothes_category', 'clothes_favorite', 'clothes_created_time')
     list_filter = ('clothes_category', 'clothes_favorite', 'clothes_created_time')
     search_fields = ('clothes_uid', 'f_user_uid', 'clothes_category')

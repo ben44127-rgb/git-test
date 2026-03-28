@@ -2,7 +2,7 @@
 
 > 更新時間: 2026-03-27  
 > 說明: test_project Main Backend 的完整 API 文檔，包含所有端點、參數、響應示例
-> 最新更新: 照片管理模塊重組 - 整合衣服管理和用戶個人照片上傳功能
+> 最新更新: 照片管理模塊重組 - 整合衣伺管理和用戶個人照片上傳功能
 
 ---
 
@@ -11,8 +11,8 @@
 | 模組 | 基礎路徑 | 說明 |
 |------|--------|------|
 | **認證** | `/account/user/` | 用戶註冊、登錄、登出等認證功能 |
-| **照片管理** | `/picture/` | 衣服、穿搭列表管理、用戶個人照片 |
-| **健康檢查** | `/health` | 服務狀態檢查 |
+| **照片管理** | `/picture/` | 衣伺、穿搭列表管理、用戶個人照片 |
+| **健康檢查** | `/health` | 伺務狀態檢查 |
 
 ---
 
@@ -211,10 +211,10 @@ Content-Type: application/json
 
 ## 📸 照片管理 API
 
-### 📕 衣服管理端點
+### 📕 衣伺管理端點
 
-### 📍 POST `/picture/clothes/` ⭐ 新增衣服
-**描述**: 用戶上傳衣服圖片，系統進行 AI 去背並自動提取衣服信息
+### 📍 POST `/picture/clothes/` ⭐ 新增衣伺
+**描述**: 用戶上傳衣伺圖片，系統進行 AI 去背並自動提取衣伺信息
 
 **請求頭**:
 ```
@@ -224,7 +224,7 @@ Content-Type: multipart/form-data
 
 **請求體 (form-data)**:
 ```
-image_data: <二進位圖片文件> (必需)
+image_data: <二進位圖片檔案> (必需)
 user_uid: <用戶UID> (可選，若使用JWT可不提供)
 ```
 
@@ -234,13 +234,13 @@ user_uid: <用戶UID> (可選，若使用JWT可不提供)
    ↓
 2. 後端轉發給 AI 進行去背處理
    ↓
-3. AI 分析並返回：衣服分類、顏色、風格
+3. AI 分析並返回：衣伺分類、顏色、風格
    ↓
 4. 圖片存儲到 MinIO
    ↓
 5. 完整數據存儲到 DB
    ↓
-6. 返回衣服詳情給前端
+6. 返回衣伺詳情給前端
 ```
 
 **成功響應 (200 OK)**:
@@ -280,13 +280,13 @@ user_uid: <用戶UID> (可選，若使用JWT可不提供)
 - `401 Unauthorized`: 未認證或令牌過期
 - `415 Unsupported Media Type`: 上傳非圖片檔案
 - `422 Unprocessable Entity`: 圖片過於模糊或無法處理
-- `503 Service Unavailable`: AI 或 MinIO 服務不可用
+- `503 Service Unavailable`: AI 或 MinIO 伺務不可用
 - `504 Gateway Timeout`: AI 處理逾時
 
 ---
 
-### 📍 GET `/picture/clothes/my` ⭐ 我的衣服列表
-**描述**: 獲取當前用戶的衣服列表（管理員可查看所有）
+### 📍 GET `/picture/clothes/my` ⭐ 我的衣伺列表
+**描述**: 獲取當前用戶的衣伺列表（管理員可查看所有）
 
 **請求頭**:
 ```
@@ -339,12 +339,12 @@ GET /picture/clothes/my?page=1&limit=20&category=T-shirt
 
 **錯誤響應**:
 - `401 Unauthorized`: 未認證或令牌過期
-- `500 Internal Server Error`: 服務器內部錯誤
+- `500 Internal Server Error`: 伺務器內部錯誤
 
 ---
 
-### 📍 GET `/picture/clothes/<id>/` ✅ 衣服詳情
-**描述**: 獲取單個衣服的詳細信息
+### 📍 GET `/picture/clothes/<id>/` ✅ 衣伺詳情
+**描述**: 獲取單個衣伺的詳細信息
 
 **請求頭**:
 ```
@@ -353,7 +353,7 @@ Authorization: Bearer <token>
 
 **路徑參數**:
 ```
-id: 1 (衣服 ID)
+id: 1 (衣伺 ID)
 ```
 
 **成功響應 (200 OK)**:
@@ -383,12 +383,12 @@ id: 1 (衣服 ID)
 
 **錯誤響應**:
 - `401 Unauthorized`: 未認證或令牌過期
-- `404 Not Found`: 衣服不存在
+- `404 Not Found`: 衣伺不存在
 
 ---
 
-### 📍 PUT `/picture/clothes/<id>/` ✅ 更新衣服
-**描述**: 更新衣服信息（衣服擁有者或管理員）
+### 📍 PUT `/picture/clothes/<id>/` ✅ 更新衣伺
+**描述**: 更新衣伺信息（衣伺擁有者或管理員）
 
 **請求頭**:
 ```
@@ -398,7 +398,7 @@ Content-Type: application/json
 
 **路徑參數**:
 ```
-id: 1 (衣服 ID)
+id: 1 (衣伺 ID)
 ```
 
 **請求體** (任意字段都可選):
@@ -443,12 +443,12 @@ id: 1 (衣服 ID)
 - `400 Bad Request`: 數據驗證失敗
 - `401 Unauthorized`: 未認證或令牌過期
 - `403 Forbidden`: 無權限修改（只有擁有者或管理員可修改）
-- `404 Not Found`: 衣服不存在
+- `404 Not Found`: 衣伺不存在
 
 ---
 
-### 📍 DELETE `/picture/clothes/<id>/` ✅ 刪除衣服
-**描述**: 刪除衣服（衣服擁有者或管理員）
+### 📍 DELETE `/picture/clothes/<id>/` ✅ 刪除衣伺
+**描述**: 刪除衣伺（衣伺擁有者或管理員）
 
 **請求頭**:
 ```
@@ -457,20 +457,20 @@ Authorization: Bearer <token>
 
 **路徑參數**:
 ```
-id: 1 (衣服 ID)
+id: 1 (衣伺 ID)
 ```
 
 **成功響應 (200 OK)**:
 ```json
 {
-  "detail": "衣服已刪除"
+  "detail": "衣伺已刪除"
 }
 ```
 
 **錯誤響應**:
 - `401 Unauthorized`: 未認證或令牌過期
 - `403 Forbidden`: 無權限刪除（只有擁有者或管理員可刪除）
-- `404 Not Found`: 衣服不存在
+- `404 Not Found`: 衣伺不存在
 
 ---
 
@@ -508,14 +508,14 @@ photo_file: <二進位圖片檔案> (JPG, PNG, GIF, WebP，最大 10MB)
 - `400 Bad Request`: 缺少檔案參數或檔案過大 (>10MB)
 - `401 Unauthorized`: Token 無效或過期
 - `415 Unsupported Media Type`: 不支持的檔案類型
-- `503 Service Unavailable`: MinIO 存儲服務不可用
+- `503 Service Unavailable`: MinIO 存儲伺務不可用
 
 ---
 
 ## ✅ 系統檢查 API
 
 ### 📍 GET `/health`
-**描述**: 檢查後端服務是否正常運行
+**描述**: 檢查後端伺務是否正常運行
 
 **請求頭**: 無
 
@@ -523,7 +523,7 @@ photo_file: <二進位圖片檔案> (JPG, PNG, GIF, WebP，最大 10MB)
 ```json
 {
   "status": "healthy",
-  "message": "服務運行正常"
+  "message": "伺務運行正常"
 }
 ```
 
@@ -538,11 +538,11 @@ photo_file: <二進位圖片檔案> (JPG, PNG, GIF, WebP，最大 10MB)
 | POST | `/account/user/logout` | 用戶登出 | ✅ | - |
 | GET | `/account/user/list` | 列出用戶 | ✅ | 管理員 |
 | POST | `/account/user/delete` | 刪除用戶 | ✅ | - |
-| **POST** | **`/picture/clothes/`** | **新增衣服** | ✅ | **⭐ 統一端點** |
-| **GET** | **`/picture/clothes/my`** | **我的衣服** | ✅ | **用戶查看** |
-| GET | `/picture/clothes/<id>/` | 衣服詳情 | ✅ | - |
-| PUT | `/picture/clothes/<id>/` | 更新衣服 | ✅ | 擁有者/管理員 |
-| DELETE | `/picture/clothes/<id>/` | 刪除衣服 | ✅ | 擁有者/管理員 |
+| **POST** | **`/picture/clothes/`** | **新增衣伺** | ✅ | **⭐ 統一端點** |
+| **GET** | **`/picture/clothes/my`** | **我的衣伺** | ✅ | **用戶查看** |
+| GET | `/picture/clothes/<id>/` | 衣伺詳情 | ✅ | - |
+| PUT | `/picture/clothes/<id>/` | 更新衣伺 | ✅ | 擁有者/管理員 |
+| DELETE | `/picture/clothes/<id>/` | 刪除衣伺 | ✅ | 擁有者/管理員 |
 | GET | `/health` | 健康檢查 | ❌ | - |
 
 ---
@@ -568,8 +568,8 @@ Authorization: Bearer <jwt_token>
 | 404 | Not Found | 資源不存在 |
 | 415 | Unsupported Media Type | 不支持的媒體類型 |
 | 422 | Unprocessable Entity | 無法處理的實體 |
-| 500 | Internal Server Error | 服務器內部錯誤 |
-| 503 | Service Unavailable | 服務不可用 |
+| 500 | Internal Server Error | 伺務器內部錯誤 |
+| 503 | Service Unavailable | 伺務不可用 |
 | 504 | Gateway Timeout | 請求超時 |
 
 ---
@@ -756,7 +756,7 @@ def logout_user(token):
        .then(res => res.json())
        .then(data => {
          if (data.status !== 'ok') {
-           console.warn('服務異常:', data.message);
+           console.warn('伺務異常:', data.message);
          }
        });
    }, 30000); // 每 30 秒檢查一次

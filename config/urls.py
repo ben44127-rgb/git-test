@@ -1,6 +1,6 @@
 """
 URL Configuration for image processing backend.
-圖像處理後端的 URL 配置
+圖像處理後端的 URL 設定
 
 這個檔案定義了應用的 URL 路由規則
 """

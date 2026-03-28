@@ -1,6 +1,6 @@
 """
 API URL Configuration
-API 應用的 URL 路由配置
+API 應用的 URL 路由設定
 
 這個檔案定義了 API 應用內部的所有路由規則
 """
@@ -17,26 +17,26 @@ urlpatterns = [
     # 存取：http://localhost:30000/health
     path('health', views.health_check, name='health_check'),
     
-    # ========== 用戶衣服管理端點 ==========
-    # 用戶新增衣服（上傳圖片 + AI 処理）
+    # ========== 用戶衣伺管理端點 ==========
+    # 用戶新增衣伺（上傳圖片 + AI 処理）
     # POST: /picture/clothes/ （multipart/form-data）
     path('picture/clothes/', views.upload_and_process, name='upload_and_process'),
     
-    # 用戶衣服列表（普通用戶看自己的，管理員看所有）
+    # 用戶衣伺列表（普通用戶看自己的，管理員看所有）
     # GET: /picture/clothes/my
     path('picture/clothes/my', views.user_clothes_list, name='user_clothes_list'),
     
-    # 用戶喜歡的衣服列表
+    # 用戶喜歡的衣伺列表
     # GET: /picture/clothes/favorites
     path('picture/clothes/favorites', views.favorites_list, name='favorites_list'),
     
-    # ========== 衣服詳情端點 ==========
-    # GET: 獲取單個衣服詳情（任何用戶均可）
-    # PUT: 更新衣服（衣服擁有者或管理員）
-    # DELETE: 刪除衣服（衣服擁有者或管理員）
+    # ========== 衣伺詳情端點 ==========
+    # GET: 獲取單個衣伺詳情（任何用戶均可）
+    # PUT: 更新衣伺（衣伺擁有者或管理員）
+    # DELETE: 刪除衣伺（衣伺擁有者或管理員）
     path('picture/clothes/<str:clothes_uid>/', views.clothes_detail, name='clothes_detail'),
     
-    # 標記/取消標記衣服為喜歡
+    # 標記/取消標記衣伺為喜歡
     # PATCH: /picture/clothes/<clothes_uid>/favorite
     path('picture/clothes/<str:clothes_uid>/favorite', views.toggle_favorite, name='toggle_favorite'),
     

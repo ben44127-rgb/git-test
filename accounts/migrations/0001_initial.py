@@ -27,8 +27,8 @@ class Migration(migrations.Migration):
                 ('clothes_updated_time', models.DateTimeField(auto_now=True, db_column='clothes_updated_time')),
             ],
             options={
-                'verbose_name': '衣服',
-                'verbose_name_plural': '衣服',
+                'verbose_name': '衣伺',
+                'verbose_name_plural': '衣伺',
                 'db_table': 'clothes',
             },
         ),

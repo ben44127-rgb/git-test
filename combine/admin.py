@@ -1,6 +1,6 @@
 """
 Django Admin Configuration for Combine App
-虛擬試衣管理的管理後台配置
+虛擬試衣管理的管理後台設定
 """
 
 from django.contrib import admin

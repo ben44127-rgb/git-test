@@ -13,11 +13,11 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='clothes',
             name='clothes_original_image_url',
-            field=models.CharField(blank=True, db_column='clothes_original_image_url', default='', help_text='原始衣服圖片URL', max_length=500),
+            field=models.CharField(blank=True, db_column='clothes_original_image_url', default='', help_text='原始衣伺圖片URL', max_length=500),
         ),
         migrations.AlterField(
             model_name='clothes',
             name='clothes_image_url',
-            field=models.CharField(db_column='clothes_image_url', help_text='去背後的衣服圖片URL', max_length=500),
+            field=models.CharField(db_column='clothes_image_url', help_text='去背後的衣伺圖片URL', max_length=500),
         ),
     ]

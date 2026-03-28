@@ -1,7 +1,7 @@
 # test_project 系統架構圖
 
 > 更新時間: 2026-03-23  
-> 說明: 根據實際代碼檢查的 test_project 微服務系統架構，包含前端頁面、兩個後端服務和存儲層
+> 說明: 根據實際代碼檢查的 test_project 微伺務系統架構，包含前端頁面、兩個後端伺務和存儲層
 
 ## 📊 完整系統架構圖（含流程順序）
 
@@ -108,9 +108,9 @@
 
 📌 **詳細 API 文檔請參見 [API.md](API.md)**
 
-## 🚀 Docker 容器配置
+## 🚀 Docker 容器設定
 
-| 服務 | 容器名 | 鏡像 | 映射 Port |
+| 伺務 | 容器名 | 鏡像 | 映射 Port |
 |------|--------|------|----------|
 | Frontend | frontend | Node.js/Nginx | 8080:8080 |
 | Main Backend | django-backend | Python/Django | 30000:30000 |
@@ -119,12 +119,12 @@
 
 ---
 
-## 📝 連接配置
+## 📝 連接設定
 
 ```bash
-# .env 中的關鍵配置:
+# .env 中的關鍵設定:
 
-# 主後端連接 AI 服務
+# 主後端連接 AI 伺務
 AI_BACKEND_URL=http://host.docker.internal:8002/virtual_try_on/clothes/remove_bg
 
 # MinIO 內部連接 (Docker 中)
@@ -169,11 +169,11 @@ test_project/
 ├── Pipfile                       # Pipenv 依賴管理
 ├── db.sqlite3                    # SQLite 數據庫 (開發環境)
 ├── docker-compose.yml            # Docker 容器編排
-├── Dockerfile                    # Django 容器配置
+├── Dockerfile                    # Django 容器設定
 ├── start.sh                      # 啟動腳本
 ├── stop.sh                       # 停止腳本
 │
-├── config/                       # 專案全局配置
+├── config/                       # 專案全局設定
 │   ├── __init__.py
 │   ├── settings.py              # Django 主要設定
 │   ├── urls.py                  # 全局 URL 路由
@@ -185,8 +185,8 @@ test_project/
 │   │
 │   ├── accounts/                # 模組：用戶賬戶管理
 │   │   ├── __init__.py
-│   │   ├── admin.py             # Admin 後台配置
-│   │   ├── apps.py              # 應用配置
+│   │   ├── admin.py             # Admin 後台設定
+│   │   ├── apps.py              # 應用設定
 │   │   ├── models.py            # 用戶認證相關模型
 │   │   │   └── User, Profile, 認證相關模型
 │   │   ├── serializers.py       # DRF 序列化器
@@ -209,22 +209,22 @@ test_project/
 │   │       ├── user - 普通用戶（可註冊、登入、管理資料）
 │   │       ├── admin - 管理員（完全控制）
 │   │
-│   └── picture/                 # 模組：圖片和衣服處理
+│   └── picture/                 # 模組：圖片和衣伺處理
 │       ├── __init__.py
-│       ├── admin.py             # Admin 後台配置
-│       ├── apps.py              # 應用配置
-│       ├── models.py            # 圖片、衣服相關模型
+│       ├── admin.py             # Admin 後台設定
+│       ├── apps.py              # 應用設定
+│       ├── models.py            # 圖片、衣伺相關模型
 │       │   └── Clothes, ClothesImage, UserPhoto 等
 │       ├── serializers.py       # DRF 序列化器
 │       │   └── ClothesSerializer, 圖片上傳序列化器
 │       ├── views.py             # API 視圖
-│       │   ├── upload_image (POST)    # 上傳衣服圖片 + 去背
+│       │   ├── upload_image (POST)    # 上傳衣伺圖片 + 去背
 │       │   ├── upload_user_picture    # 上傳模特照片 + 去背
-│       │   ├── favorites (GET)        # 查看喜歡的衣服列表
+│       │   ├── favorites (GET)        # 查看喜歡的衣伺列表
 │       │   └── 虛擬試衣相關 API
 │       ├── urls.py              # 應用級 URL 路由
 │       ├── permissions.py       # 自訂權限類
-│       ├── services/            # 業務邏輯服務層
+│       ├── services/            # 業務邏輯伺務層
 │       │   ├── __init__.py
 │       │   ├── image_service.py    # 圖片處理邏輯
 │       │   │   ├── 圖片驗證
@@ -249,9 +249,9 @@ test_project/
 │   ├── Architecture.md         # 架構文檔
 │   └── README.md               # 專案說明
 │
-├── logs/                        # 日誌文件
+├── logs/                        # 日誌檔案
 │
-└── picture/                    # 媒體文件存儲
+└── picture/                    # 媒體檔案存儲
     └── (已上傳的圖片)
 ```
 
@@ -361,7 +361,7 @@ python manage.py migrate
 # 創建超級用戶 (Admin)
 python manage.py createsuperuser
 
-# 運行開發伺服器
+# 運行開發伺伺器
 python manage.py runserver
 
 # 訪問 Django Admin

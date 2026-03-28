@@ -166,9 +166,9 @@ def virtual_try_on(request):
     功能編號：Feature 3.1 - 虛擬試衣
     
     流程説明：
-    1️⃣ 前端用戶選擇衣服組合（必須恰好 2 件）
+    1️⃣ 前端用戶選擇衣伺組合（必須恰好 2 件）
     2️⃣ 發送請求至後端
-    3️⃣ 後端驗證用戶身體數據和衣服數據
+    3️⃣ 後端驗證用戶身體數據和衣伺數據
     4️⃣ 後端準備 AI 請求參數
     5️⃣ 轉發至 AI 後端進行虛擬試衣合成
     6️⃣ AI 返回試衣結果圖片
@@ -182,11 +182,11 @@ def virtual_try_on(request):
     
     自動使用原始圖片給 AI 後端：
     - 模特圖片：優先使用 user_original_image_url（原始模特照片）
-    - 衣服圖片：優先使用 clothes_original_image_url（原始衣服照片）
+    - 衣伺圖片：優先使用 clothes_original_image_url（原始衣伺照片）
     
     返回給前端的預覽圖片：
     - 模特圖片：user_image_url（處理後）
-    - 衣服圖片：clothes_image_url（去背圖）
+    - 衣伺圖片：clothes_image_url（去背圖）
     
     返回示例：
     {
@@ -230,11 +230,11 @@ def virtual_try_on(request):
         }
         
         # AI 後端合成使用原始圖片
-        logger.info(f"🎨 虛擬試穿配置：")
-        logger.info(f"   AI 後端使用：原始模特照片 + 原始衣服照片")
-        logger.info(f"   前端預覽：處理後模特照片 + 去背衣服圖片")
+        logger.info(f"🎨 虛擬試穿設定：")
+        logger.info(f"   AI 後端使用：原始模特照片 + 原始衣伺照片")
+        logger.info(f"   前端預覽：處理後模特照片 + 去背衣伺圖片")
 
-        # 依照輸入順序載入衣服資料
+        # 依照輸入順序載入衣伺資料
         clothes_qs = Clothes.objects.filter(
             clothes_uid__in=clothes_ids,
             f_user_uid=str(request.user.user_uid)
@@ -245,7 +245,7 @@ def virtual_try_on(request):
         if any(item is None for item in ordered_clothes):
             return Response({
                 'success': False,
-                'message': '衣服不存在或不屬於當前使用者',
+                'message': '衣伺不存在或不屬於當前使用者',
             }, status=status.HTTP_403_FORBIDDEN)
 
         # 獲取用戶模特照片
@@ -273,7 +273,7 @@ def virtual_try_on(request):
                 'success': False,
                 'message': '無法訪問模特照片 URL',
                 'error_code': 'MODEL_IMAGE_CONNECTION_ERROR',
-                'hint': 'user_image_url 可能配置不正確。在 Docker 容器內，必須使用 minio:9000 而不是 localhost:9000',
+                'hint': 'user_image_url 可能設定不正確。在 Docker 容器內，必須使用 minio:9000 而不是 localhost:9000',
             }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         except requests.exceptions.Timeout as e:
             logger.error(f'❌ 下載模特照片超時：{model_image_url}')
@@ -291,7 +291,7 @@ def virtual_try_on(request):
         
         model_content_type = model_img_resp.headers.get('Content-Type', 'image/png')
 
-        # 準備衣服資料
+        # 準備衣伺資料
         garments = []
         for idx, clothes in enumerate(ordered_clothes):
             try:
@@ -300,29 +300,29 @@ def virtual_try_on(request):
                 if clothes.clothes_original_image_url:
                     clothes_image_to_use = clothes.clothes_original_image_url
                     image_type = "原始圖"
-                    logger.info(f"   衣服 {idx+1}：使用 {image_type}（AI 後端合成用）")
+                    logger.info(f"   衣伺 {idx+1}：使用 {image_type}（AI 後端合成用）")
                 else:
                     clothes_image_to_use = clothes.clothes_image_url
                     image_type = "去背圖"
-                    logger.warning(f"   衣服 {idx+1}：原始圖不存在，回退到 {image_type}")
+                    logger.warning(f"   衣伺 {idx+1}：原始圖不存在，回退到 {image_type}")
                 
-                # 轉換衣服圖片 URL（如果需要）
+                # 轉換衣伺圖片 URL（如果需要）
                 clothes_url = _convert_url_for_container(clothes_image_to_use)
-                # 下載衣服圖片，並在失敗時重試
+                # 下載衣伺圖片，並在失敗時重試
                 garment_resp = _download_image_with_fallback(clothes_url, timeout=30)
             except requests.exceptions.ConnectionError as e:
-                logger.error(f'❌ 無法連接到衣服圖片 URL：{clothes_image_to_use}')
+                logger.error(f'❌ 無法連接到衣伺圖片 URL：{clothes_image_to_use}')
                 return Response({
                     'success': False,
-                    'message': f'無法訪問衣服圖片：{clothes.clothes_uid}',
+                    'message': f'無法訪問衣伺圖片：{clothes.clothes_uid}',
                     'error_code': 'CLOTHES_IMAGE_CONNECTION_ERROR',
                     'error_detail': str(e),
                 }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
             except requests.exceptions.RequestException as e:
-                logger.error(f'❌ 下載衣服圖片失敗：{clothes.clothes_uid}，錯誤：{e}')
+                logger.error(f'❌ 下載衣伺圖片失敗：{clothes.clothes_uid}，錯誤：{e}')
                 return Response({
                     'success': False,
-                    'message': f'無法下載衣服圖片：{clothes.clothes_uid}',
+                    'message': f'無法下載衣伺圖片：{clothes.clothes_uid}',
                     'error_detail': str(e),
                 }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
             
@@ -330,7 +330,7 @@ def virtual_try_on(request):
             garments.append({
                 'type': garment_type,
                 'image': ('garment.png', garment_resp.content, 'image/png'),
-                'clothes': clothes,  # 保存衣服物件以便提取詳細信息
+                'clothes': clothes,  # 保存衣伺物件以便提取詳細信息
             })
 
         # 準備 AI 請求
@@ -343,13 +343,13 @@ def virtual_try_on(request):
             ('model_image', ('model.png', model_img_resp.content, model_content_type)),
         ]
         
-        # 添加衣服圖片到請求
+        # 添加衣伺圖片到請求
         # 使用列表格式，重複使用 'garment_images' 作為鍵名
         for i, garment in enumerate(garments):
             gimg = garment['image']
             # 添加到列表（Flask 的 getlist('garment_images') 會接收所有這些值）
             ai_files_list.append(('garment_images', gimg))
-            logger.info(f"📦 添加衣服圖片 {i}：{gimg[0]}，大小：{len(gimg[1])} bytes，類型：{garment['type']}")
+            logger.info(f"📦 添加衣伺圖片 {i}：{gimg[0]}，大小：{len(gimg[1])} bytes，類型：{garment['type']}")
 
         # 準備 garments 的詳細信息（根據 FUNCTIONS.md 規範）
         garments_data = []
@@ -360,7 +360,7 @@ def virtual_try_on(request):
                 'garment_info': {}
             }
             
-            # 根據衣服類型添加相應的尺寸信息
+            # 根據衣伺類型添加相應的尺寸信息
             if idx == 0:  # top
                 garment_info['garment_info']['clothes_arm_length'] = float(clothes_obj.clothes_arm_length or 0)
                 garment_info['garment_info']['clothes_shoulder_width'] = float(clothes_obj.clothes_shoulder_width or 0)
@@ -393,7 +393,7 @@ def virtual_try_on(request):
             logger.error(f"❌ 調用 AI 後端失敗：{e}")
             return Response({
                 'success': False,
-                'message': f'AI 服務連接失敗：{str(e)}',
+                'message': f'AI 伺務連接失敗：{str(e)}',
                 'error_code': 'AI_CONNECTION_ERROR',
             }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
@@ -471,7 +471,7 @@ def virtual_try_on(request):
                 f"/{settings.MINIO_BUCKET_NAME}/virtual-try-on/{safe_file_name}"
             )
 
-        # 構建衣服清單
+        # 構建衣伺清單
         clothes_list = []
         for idx, clothes in enumerate(ordered_clothes):
             clothes_list.append({
@@ -537,8 +537,8 @@ def get_my_try_ons(request):
     查看當前用戶的虛擬試穿歷史 (功能編號: TRYON-002)
     
     query parameters:
-    - page: 页数（默认 1）
-    - limit: 每页数量（默认 20）
+    - page: 頁數（預設 1）
+    - limit: 每頁數量（預設 20）
     
     示例：
     GET /combine/user/virtual-try-on-history?page=1&limit=20
@@ -546,7 +546,7 @@ def get_my_try_ons(request):
     返回：
     {
         "success": true,
-        "message": "试穿历史获取成功",
+        "message": "試穿历史獲取成功",
         "count": 12,
         "total_pages": 1,
         "current_page": 1,
@@ -676,7 +676,7 @@ def delete_virtual_try_on(request, model_uid):
     - 成功: 200 OK
     - 失敗:
       - 404 Not Found: 試穿紀錄不存在或沒有權限
-      - 500 Internal Server Error: 伺服器錯誤
+      - 500 Internal Server Error: 伺伺器錯誤
     
     範例：
     DELETE /combine/user/virtual-try-on/<model_uid>
@@ -730,13 +730,13 @@ def delete_virtual_try_on(request, model_uid):
 
 def _delete_minio_file(file_url):
     """
-    從 MinIO 中删除文件。
+    從 MinIO 中刪除檔案。
     
     參數：
     - file_url: MinIO 檔案 URL（完整 URL 或路徑）
     
     說明：
-    - 如果文件已被刪除或不存在，不拋出錯誤
+    - 如果檔案已被刪除或不存在，不拋出錯誤
     - 在 try-except 中調用，不影響主操作
     """
     try:

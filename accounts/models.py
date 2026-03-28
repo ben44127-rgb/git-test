@@ -102,7 +102,7 @@ class User(AbstractBaseUser):
 
 class Clothes(models.Model):
     """
-    衣服表模型
+    衣伺表模型
     對應圖片中的 clothes 表結構
     """
     clothes_id = models.AutoField(primary_key=True, db_column='clothes_id')
@@ -113,16 +113,16 @@ class Clothes(models.Model):
     clothes_shoulder_width = models.IntegerField(default=0, db_column='clothes_shoulder_width', help_text='肩寬(cm)')
     clothes_waistline = models.IntegerField(default=0, db_column='clothes_waistline', help_text='腰圍(cm)')
     clothes_leg_length = models.IntegerField(default=0, db_column='clothes_leg_length', help_text='褲長(cm)')
-    clothes_image_url = models.CharField(max_length=500, db_column='clothes_image_url', help_text='去背後的衣服圖片URL')
-    clothes_original_image_url = models.CharField(max_length=500, db_column='clothes_original_image_url', default='', blank=True, help_text='原始衣服圖片URL')
+    clothes_image_url = models.CharField(max_length=500, db_column='clothes_image_url', help_text='去背後的衣伺圖片URL')
+    clothes_original_image_url = models.CharField(max_length=500, db_column='clothes_original_image_url', default='', blank=True, help_text='原始衣伺圖片URL')
     clothes_favorite = models.BooleanField(default=False, db_column='clothes_favorite')
     clothes_created_time = models.DateTimeField(auto_now_add=True, db_column='clothes_created_time')
     clothes_updated_time = models.DateTimeField(auto_now=True, db_column='clothes_updated_time')
     
     class Meta:
         db_table = 'clothes'
-        verbose_name = '衣服'
-        verbose_name_plural = '衣服'
+        verbose_name = '衣伺'
+        verbose_name_plural = '衣伺'
     
     def __str__(self):
         return f"{self.clothes_category} - {self.clothes_uid}"
@@ -132,7 +132,7 @@ class Style(models.Model):
     """
     風格表模型
     對應圖片中的 style 表結構
-    一件衣服可對應多個風格（多筆 style 連接同一個 clothes_uid）
+    一件衣伺可對應多個風格（多筆 style 連接同一個 clothes_uid）
     """
     style_id = models.AutoField(primary_key=True, db_column='style_id')
     f_clothes_uid = models.CharField(max_length=255, db_column='f_clothes_uid')
@@ -152,7 +152,7 @@ class Color(models.Model):
     """
     顏色表模型
     對應圖片中的 color 表結構
-    一件衣服可對應多個顏色
+    一件衣伺可對應多個顏色
     """
     color_id = models.AutoField(primary_key=True, db_column='color_id')
     f_clothes_uid = models.CharField(max_length=255, db_column='f_clothes_uid')

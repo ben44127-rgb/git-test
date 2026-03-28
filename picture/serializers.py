@@ -1,6 +1,6 @@
 """
 Serializers for Picture/Clothes Management API
-圖片/衣服管理 API 的序列化器
+圖片/衣伺管理 API 的序列化器
 
 這個檔案定義了所有的數據序列化器，用於
 驗證和轉換請求/回應數據
@@ -30,8 +30,8 @@ class StyleSerializer(serializers.ModelSerializer):
 
 class ClothesSerializer(serializers.ModelSerializer):
     """
-    衣服序列化器
-    包含完整的衣服信息及其相關的風格和顏色
+    衣伺序列化器
+    包含完整的衣伺信息及其相關的風格和顏色
     """
     # 將相關的 Color 和 Style 作為嵌套序列化器
     colors = serializers.SerializerMethodField()
@@ -62,24 +62,24 @@ class ClothesSerializer(serializers.ModelSerializer):
         ]
     
     def get_colors(self, obj):
-        """獲取該衣服的所有顏色"""
+        """獲取該衣伺的所有顏色"""
         colors = Color.objects.filter(f_clothes_uid=obj.clothes_uid)
         return ColorSerializer(colors, many=True).data
     
     def get_styles(self, obj):
-        """獲取該衣服的所有風格"""
+        """獲取該衣伺的所有風格"""
         styles = Style.objects.filter(f_clothes_uid=obj.clothes_uid)
         return StyleSerializer(styles, many=True).data
 
 
 class ClothesCreateSerializer(serializers.Serializer):
     """
-    衣服創建序列化器 (用於 POST 和 PUT)
-    包含衣服信息及相關的顏色和風格列表
+    衣伺創建序列化器 (用於 POST 和 PUT)
+    包含衣伺信息及相關的顏色和風格列表
     """
     clothes_category = serializers.CharField(
         max_length=100,
-        help_text="衣服分類 (例如: 上衣, 褲子, 連身裙)"
+        help_text="衣伺分類 (例如: 上衣, 褲子, 連身裙)"
     )
     clothes_arm_length = serializers.IntegerField(
         default=0,
@@ -101,19 +101,19 @@ class ClothesCreateSerializer(serializers.Serializer):
         max_length=500,
         required=False,
         allow_blank=True,
-        help_text="衣服圖片 URL"
+        help_text="衣伺圖片 URL"
     )
     colors = serializers.ListField(
         child=serializers.CharField(max_length=100),
         required=False,
         default=[],
-        help_text="衣服顏色列表 (例如: ['藍色', '紅色', '黑色'])"
+        help_text="衣伺顏色列表 (例如: ['藍色', '紅色', '黑色'])"
     )
     styles = serializers.ListField(
         child=serializers.CharField(max_length=100),
         required=False,
         default=[],
-        help_text="衣服風格列表 (例如: ['休閒', '正式', '運動'])"
+        help_text="衣伺風格列表 (例如: ['休閒', '正式', '運動'])"
     )
     
     def validate_clothes_arm_length(self, value):
@@ -143,8 +143,8 @@ class ClothesCreateSerializer(serializers.Serializer):
 
 class ClothesDetailSerializer(serializers.ModelSerializer):
     """
-    衣服詳情序列化器 (用於 GET 單個衣服)
-    包含完整的衣服信息及其相關的風格和顏色
+    衣伺詳情序列化器 (用於 GET 單個衣伺)
+    包含完整的衣伺信息及其相關的風格和顏色
     """
     colors = serializers.SerializerMethodField()
     styles = serializers.SerializerMethodField()
@@ -174,11 +174,11 @@ class ClothesDetailSerializer(serializers.ModelSerializer):
         ]
     
     def get_colors(self, obj):
-        """獲取該衣服的所有顏色"""
+        """獲取該衣伺的所有顏色"""
         colors = Color.objects.filter(f_clothes_uid=obj.clothes_uid)
         return ColorSerializer(colors, many=True).data
     
     def get_styles(self, obj):
-        """獲取該衣服的所有風格"""
+        """獲取該衣伺的所有風格"""
         styles = Style.objects.filter(f_clothes_uid=obj.clothes_uid)
         return StyleSerializer(styles, many=True).data

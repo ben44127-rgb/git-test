@@ -1,6 +1,6 @@
 """
 ASGI config for image processing backend.
-圖像處理後端的 ASGI 配置
+圖像處理後端的 ASGI 設定
 
 ASGI (Asynchronous Server Gateway Interface) 是 Python 異步 Web 應用的標準接口
 支援 WebSocket、HTTP/2 等異步協議
@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 from django.core.asgi import get_asgi_application
 
-# 提前載入環境變數，確保 ASGI 應用能使用 .env 中的配置
+# 提前載入環境變數，確保 ASGI 應用能使用 .env 中的設定
 try:
     from dotenv import load_dotenv
     # 找到專案根目錄的 .env 檔案
