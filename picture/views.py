@@ -382,8 +382,8 @@ def upload_and_process(request):
         logger.info(f"📤 發送給 AI 後端的參數：{json.dumps(data, ensure_ascii=False)}")
 
         # 發送 POST 請求給 AI 後端（衣服去背處理）
-        # 完整 URL: http://localhost:8002/virtual_try_on/clothes/remove_bg
-        ai_remove_bg_url = f"{settings.AI_BACKEND_URL}/virtual_try_on/clothes/remove_bg"
+        # 使用 settings 中的完整 URL（自動拼接 AI_BACKEND_URL + AI_CLOTHES_REMOVE_BG_ENDPOINT）
+        ai_remove_bg_url = settings.AI_CLOTHES_REMOVE_BG_URL
         logger.info(f"🔗 完整 AI 端點 URL：{ai_remove_bg_url}")
         
         ai_response = requests.post(
@@ -1392,7 +1392,8 @@ def user_photo(request):
         
         # 發送 POST 請求給 AI 後端（模特照片去背處理）
         # 路由：/virtual_try_on/fitting/modules
-        ai_fitting_url = f"{settings.AI_BACKEND_URL}/virtual_try_on/fitting/modules"
+        # 使用 settings 中的完整 URL（自動拼接 AI_BACKEND_URL + AI_USER_FITTING_MODULES_ENDPOINT）
+        ai_fitting_url = settings.AI_USER_FITTING_MODULES_URL
         logger.info(f"🔗 AI 端點 URL：{ai_fitting_url}")
         
         try:
@@ -1842,7 +1843,8 @@ def user_photo(request):
         }
         
         # 發送 POST 請求給 AI 後端（模特照片去背處理）
-        ai_fitting_url = f"{settings.AI_BACKEND_URL}/virtual_try_on/fitting/modules"
+        # 使用 settings 中的完整 URL（自動拼接 AI_BACKEND_URL + AI_USER_FITTING_MODULES_ENDPOINT）
+        ai_fitting_url = settings.AI_USER_FITTING_MODULES_URL
         logger.info(f"🔗 AI 端點 URL：{ai_fitting_url}")
         
         try:

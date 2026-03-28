@@ -30,18 +30,11 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-this-in-prod
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 # 允許的主機清單
-# 在生產環境中，應該設定為具體的域名
-ALLOWED_HOSTS = [
-    'localhost',
-    '127.0.0.1',
-    '0.0.0.0',
-    'django-backend',  # Docker 容器名
-]
-
-# 可以透過環境變數擴展
-extra_hosts = os.getenv('DJANGO_ALLOWED_HOSTS', '').strip()
-if extra_hosts:
-    ALLOWED_HOSTS.extend([h.strip() for h in extra_hosts.split(',')])
+# 从环境变量读取，格式: 逗号分隔的主机列表
+# 例如: DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,django-backend,35.201.135.229
+default_hosts = 'localhost,127.0.0.1,0.0.0.0,django-backend'
+allowed_hosts_str = os.getenv('DJANGO_ALLOWED_HOSTS', default_hosts)
+ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_str.split(',') if h.strip()]
 
 
 # Application definition
@@ -230,9 +223,9 @@ MINIO_SECURE = os.getenv('MINIO_SECURE', 'False') == 'True'
 MINIO_EXTERNAL_URL = os.getenv('MINIO_EXTERNAL_URL', 'http://localhost:9000')
 
 # ==========================================
-# AI 後端配置（單一變數，用戶手動切換）
+# AI 後端配置（基礎 URL + 具體端點）
 # ==========================================
-# 【重點】AI_BACKEND_URL 是單一變數，用戶根據環境手動設置：
+# 【重點】AI_BACKEND_URL 是基礎 URL，用戶根據環境手動設置：
 # 
 # 本地開發（模擬 AI）：
 #   AI_BACKEND_URL=http://localhost:8002
@@ -248,18 +241,56 @@ AI_BACKEND_URL = os.getenv(
     'http://localhost:8002'  # 預設為本地模擬 AI
 )
 
-# AI 虛擬試穿端點（相對於 AI_BACKEND_URL 的路徑）
-AI_VIRTUAL_TRY_ON_ENDPOINT = os.getenv(
-    'AI_VIRTUAL_TRY_ON_ENDPOINT',
-    '/virtual_try_on/clothes/combine'
+# ==========================================
+# AI 後端具體端點（三個關鍵功能）
+# ==========================================
+# 【功能 2.1】衣服去背處理（用戶上傳衣服時調用）
+# 完整 URL 會自動拼接為：{AI_BACKEND_URL}/{AI_CLOTHES_REMOVE_BG_ENDPOINT}
+AI_CLOTHES_REMOVE_BG_ENDPOINT = os.getenv(
+    'AI_CLOTHES_REMOVE_BG_ENDPOINT',
+    '/virtual_try_on/clothes/remove_bg'
 )
 
-# 組合完整的虛擬試穿 URL（為了向後相容）
-AI_BACKEND_VIRTUAL_TRY_ON_URL = (
-    AI_BACKEND_URL + AI_VIRTUAL_TRY_ON_ENDPOINT
-    if not AI_BACKEND_URL.endswith(AI_VIRTUAL_TRY_ON_ENDPOINT)
+# 【功能 3.1 - 支持】人物去背處理（虛擬試穿時調用，提取用戶背景）
+# 完整 URL 會自動拼接為：{AI_BACKEND_URL}/{AI_USER_FITTING_MODULES_ENDPOINT}
+AI_USER_FITTING_MODULES_ENDPOINT = os.getenv(
+    'AI_USER_FITTING_MODULES_ENDPOINT',
+    '/virtual_try_on/fitting/modules'
+)
+
+# 【功能 3.1】虛擬試穿合成（虛擬試穿主要功能 - AI 合成虛擬試穿結果）
+# 完整 URL 會自動拼接為：{AI_BACKEND_URL}/{AI_VIRTUAL_TRY_ON_FITTING_ENDPOINT}
+AI_VIRTUAL_TRY_ON_FITTING_ENDPOINT = os.getenv(
+    'AI_VIRTUAL_TRY_ON_FITTING_ENDPOINT',
+    '/virtual_try_on/fitting/generate'
+)
+
+# ==========================================
+# 自動生成完整 URL（便於代碼中直接使用）
+# ==========================================
+# 衣服去背完整 URL
+AI_CLOTHES_REMOVE_BG_URL = (
+    f"{AI_BACKEND_URL}{AI_CLOTHES_REMOVE_BG_ENDPOINT}"
+    if not AI_BACKEND_URL.endswith(AI_CLOTHES_REMOVE_BG_ENDPOINT)
     else AI_BACKEND_URL
 )
+
+# 人物去背完整 URL
+AI_USER_FITTING_MODULES_URL = (
+    f"{AI_BACKEND_URL}{AI_USER_FITTING_MODULES_ENDPOINT}"
+    if not AI_BACKEND_URL.endswith(AI_USER_FITTING_MODULES_ENDPOINT)
+    else AI_BACKEND_URL
+)
+
+# 虛擬試穿合成完整 URL
+AI_VIRTUAL_TRY_ON_FITTING_URL = (
+    f"{AI_BACKEND_URL}{AI_VIRTUAL_TRY_ON_FITTING_ENDPOINT}"
+    if not AI_BACKEND_URL.endswith(AI_VIRTUAL_TRY_ON_FITTING_ENDPOINT)
+    else AI_BACKEND_URL
+)
+
+# 向後相容：保留舊的 AI_BACKEND_VIRTUAL_TRY_ON_URL（已廢棄，使用 AI_VIRTUAL_TRY_ON_FITTING_URL 替代）
+AI_BACKEND_VIRTUAL_TRY_ON_URL = AI_VIRTUAL_TRY_ON_FITTING_URL
 
 # 檔案上傳配置
 UPLOAD_FOLDER = BASE_DIR / 'output'

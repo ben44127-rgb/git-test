@@ -334,8 +334,8 @@ def virtual_try_on(request):
             })
 
         # 準備 AI 請求
-        # 使用 settings 中定義的 AI_BACKEND_VIRTUAL_TRY_ON_URL
-        ai_url = getattr(settings, 'AI_BACKEND_VIRTUAL_TRY_ON_URL', settings.AI_BACKEND_URL)
+        # 使用 settings 中定義的虛擬試穿完整 URL（自動拼接 AI_BACKEND_URL + AI_VIRTUAL_TRY_ON_FITTING_ENDPOINT）
+        ai_url = settings.AI_VIRTUAL_TRY_ON_FITTING_URL
         
         # 準備 multipart files
         # 注意：requests 庫支持將 files 參數設為列表，以發送多個同名的 file fields

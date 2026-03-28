@@ -68,13 +68,15 @@ services:
       MINIO_SECURE: "False"
 
       # MinIO 外部訪問地址（前端瀏覽器用這個 URL 訪問圖片）
-      # 根據運行環境自行修改：localhost:9000 (本地) 或 192.168.233.128:9000 (Lan IP)
-      MINIO_EXTERNAL_URL: ${MINIO_EXTERNAL_URL:-http://192.168.233.128:9000}
+      # 雲服務器部署：使用服務器公網 IP
+      MINIO_EXTERNAL_URL: ${MINIO_EXTERNAL_URL:-http://35.201.135.229:9000}
 
       # AI 後端配置
-      # 如果 AI 服務也在 Docker 中，使用服務名稱
-      # 如果在宿主機上，使用 host.docker.internal (Mac/Windows) 或 172.17.0.1 (Linux)
-      AI_BACKEND_URL: ${AI_BACKEND_URL:-http://host.docker.internal:8002/virtual_try_on/clothes/remove_bg}
+      # 雲服務器部署：連接到 AI 後端服務器
+      # 注意：端點會根據功能分別調用：
+      #   - 衣服上傳去背：/virtual_try_on/clothes/remove_bg
+      #   - 虛擬試穿合成：/virtual_try_on/clothes/combine
+      AI_BACKEND_URL: ${AI_BACKEND_URL:-http://35.201.135.229:8002}
 
       # Django 配置
       DEBUG: ${DEBUG:-False}
