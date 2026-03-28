@@ -6,6 +6,7 @@ URL Configuration for Combine App
 1. /combine/user/virtual-try-on            - 虛擬試衣（Feature 3.1）
 2. /combine/user/virtual-try-on-history    - 我的試穿歷史
 3. /combine/user/virtual-try-on-detail/<model_uid>  - 試穿詳情
+4. /combine/user/virtual-try-on-delete/<model_uid>  - 刪除試穿結果 (Feature 3.4)
 """
 
 from django.urls import path
@@ -23,4 +24,7 @@ urlpatterns = [
     
     # GET：查看單筆試穿詳情
     path('user/virtual-try-on-detail/<str:model_uid>', views.get_try_on_detail, name='user_get_try_on_detail'),
+    
+    # DELETE：刪除試穿結果
+    path('user/virtual-try-on-delete/<str:model_uid>', views.delete_virtual_try_on, name='user_delete_virtual_try_on'),
 ]

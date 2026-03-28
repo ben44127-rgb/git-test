@@ -505,26 +505,66 @@ def virtual_try_on(request):
 @permission_classes([IsAuthenticated])
 def get_my_try_ons(request):
     """
-    查看當前用戶的虛擬試穿歷史
+    查看當前用戶的虛擬試穿歷史 (功能編號: TRYON-002)
     
-    查詢參數：
-    - page: 頁碼（默認 1）
-    - limit: 每頁數量（默認 20）
+    query parameters:
+    - page: 页数（默认 1）
+    - limit: 每页数量（默认 20）
+    
+    示例：
+    GET /combine/user/virtual-try-on-history?page=1&limit=20
+    
+    返回：
+    {
+        "success": true,
+        "message": "试穿历史获取成功",
+        "count": 12,
+        "total_pages": 1,
+        "current_page": 1,
+        "limit": 20,
+        "results": [
+            {
+                "model_uid": "...",
+                "model_picture": "http://...",
+                "model_style": ["Japanese Style", "Elegant"],
+                "created_at": "2026-03-28T10:30:00Z"
+            }
+        ]
+    }
     """
     
     try:
+        # 分頁參數
         page = int(request.query_params.get('page', 1))
         limit = int(request.query_params.get('limit', 20))
+        
+        # 驗證分頁參數
+        if page < 1 or limit < 1:
+            return Response({
+                'success': False,
+                'message': '頁碼和每頁數量必須大於 0',
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         start_idx = (page - 1) * limit
         end_idx = start_idx + limit
         
+        # 構建查詢集（按創建時間倒序）
         queryset = Model.objects.filter(
             f_user_uid=str(request.user.user_uid)
         ).order_by('-model_created_time')
         
+        # 計算分頁信息
         total_count = queryset.count()
         total_pages = (total_count + limit - 1) // limit
         
+        # 驗證頁碼
+        if page > total_pages and total_count > 0:
+            return Response({
+                'success': False,
+                'message': f'頁碼超出範圍（總頁數：{total_pages}）',
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 執行分頁查詢
         paginated_queryset = queryset[start_idx:end_idx]
         serializer = ModelSerializer(paginated_queryset, many=True)
         
@@ -536,12 +576,20 @@ def get_my_try_ons(request):
             'current_page': page,
             'limit': limit,
             'results': serializer.data,
-        })
+        }, status=status.HTTP_200_OK)
     
-    except Exception as e:
+    except ValueError as e:
         return Response({
             'success': False,
-            'message': f'獲取試穿歷史失敗：{str(e)}',
+            'message': f'參數格式錯誤：{str(e)}',
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    except Exception as e:
+        logger.error(f"❌ 獲取試穿歷史失敗：{str(e)}")
+        return Response({
+            'success': False,
+            'message': '獲取試穿歷史失敗',
+            'error_detail': str(e),
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -580,3 +628,130 @@ def get_try_on_detail(request, model_uid):
             'success': False,
             'message': f'獲取試穿詳情失敗：{str(e)}',
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ============================================================================
+# 刪除虛擬試穿結果
+# ============================================================================
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_virtual_try_on(request, model_uid):
+    """
+    刪除一個虛擬試穿結果 (功能編號: TRYON-004)
+    
+    路徑參數：
+    - model_uid: 試穿結果 UUID
+    
+    返回：
+    - 成功: 200 OK
+    - 失敗:
+      - 404 Not Found: 試穿紀錄不存在或沒有權限
+      - 500 Internal Server Error: 伺服器錯誤
+    
+    範例：
+    DELETE /combine/user/virtual-try-on/<model_uid>
+    """
+    
+    try:
+        # 獲取試穿結果，確保用戶有權限（只能刪除自己的）
+        try:
+            model = Model.objects.get(
+                model_uid=model_uid,
+                f_user_uid=str(request.user.user_uid)
+            )
+        except Model.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': '試穿紀錄不存在或沒有權限刪除',
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # 記錄刪除前的信息
+        model_picture = model.model_picture
+        model_id = model.model_id
+        
+        # 刪除試穿結果
+        model.delete()
+        
+        logger.info(f"✅ 成功刪除試穿結果: model_uid={model_uid}, user_uid={request.user.user_uid}")
+        
+        # 嘗試刪除 MinIO 中的圖片（可選，防止儲存空間浪費）
+        if model_picture:
+            try:
+                _delete_minio_file(model_picture)
+                logger.info(f"✅ 已刪除 MinIO 中的圖片: {model_picture}")
+            except Exception as e:
+                # 圖片刪除失敗不影響整體刪除操作
+                logger.warning(f"⚠️ 刪除 MinIO 圖片失敗，但試穿紀錄已刪除: {str(e)}")
+        
+        return Response({
+            'success': True,
+            'message': '試穿結果已成功刪除',
+            'deleted_model_uid': model_uid,
+            'deleted_model_id': model_id,
+        }, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        logger.error(f"❌ 刪除試穿結果失敗：{str(e)}")
+        return Response({
+            'success': False,
+            'message': f'刪除試穿結果失敗：{str(e)}',
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def _delete_minio_file(file_url):
+    """
+    從 MinIO 中删除文件。
+    
+    參數：
+    - file_url: MinIO 檔案 URL（完整 URL 或路徑）
+    
+    說明：
+    - 如果文件已被刪除或不存在，不拋出錯誤
+    - 在 try-except 中調用，不影響主操作
+    """
+    try:
+        # 解析 MinIO URL 獲取 bucket 和 object name
+        # 典型 URL: http://minio:9000/bucket-name/path/to/file.png
+        # 或: http://192.168.233.128:9000/bucket-name/path/to/file.png
+        
+        if not file_url:
+            return
+        
+        # 提取 bucket 和 object name
+        # 移除協議
+        url_without_protocol = file_url.split('://', 1)[1] if '://' in file_url else file_url
+        # 分割 host 和 path
+        parts = url_without_protocol.split('/', 1)
+        if len(parts) < 2:
+            return
+        
+        path_part = parts[1]
+        # 分割 bucket 和 object name
+        path_parts = path_part.split('/', 1)
+        if len(path_parts) < 2:
+            return
+        
+        bucket_name = path_parts[0]
+        object_name = path_parts[1]
+        
+        # 創建 MinIO 客戶端並刪除
+        minio_client = Minio(
+            endpoint=settings.MINIO_ENDPOINT,
+            access_key=settings.MINIO_ACCESS_KEY,
+            secret_key=settings.MINIO_SECRET_KEY,
+            secure=False
+        )
+        
+        try:
+            minio_client.remove_object(bucket_name, object_name)
+            logger.info(f"✅ MinIO 檔案已刪除: {bucket_name}/{object_name}")
+        except S3Error as e:
+            # 如果檔案不存在（errCode=NoSuchKey），不視為錯誤
+            if e.code != 'NoSuchKey':
+                raise
+            logger.info(f"ℹ️ MinIO 檔案不存在，已忽略: {bucket_name}/{object_name}")
+    
+    except Exception as e:
+        logger.warning(f"⚠️ 無法從 MinIO 刪除檔案: {str(e)}")
+        # 不拋出異常，讓調用者決定是否處理

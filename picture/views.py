@@ -380,9 +380,13 @@ def upload_and_process(request):
 
         logger.info(f"📤 發送給 AI 後端的參數：{json.dumps(data, ensure_ascii=False)}")
 
-        # 發送 POST 請求給 AI 後端
+        # 發送 POST 請求給 AI 後端（衣服去背處理）
+        # 完整 URL: http://localhost:8002/virtual_try_on/clothes/remove_bg
+        ai_remove_bg_url = f"{settings.AI_BACKEND_URL}/virtual_try_on/clothes/remove_bg"
+        logger.info(f"🔗 完整 AI 端點 URL：{ai_remove_bg_url}")
+        
         ai_response = requests.post(
-            settings.AI_BACKEND_URL,
+            ai_remove_bg_url,
             files=files,
             data=data,
             timeout=120  # 120秒逾時（AI 處理可能較耗時）
@@ -591,8 +595,11 @@ def upload_and_process(request):
     # 產生唯一檔案名稱：使用 AI 回傳的 file_name + 唯一前綴
     unique_id = uuid.uuid4().hex[:8]
     base_name = file_name.rsplit('.', 1)[0] if '.' in file_name else file_name
-    unique_filename = f"{unique_id}_{base_name}{format_info['ext']}"
-    logger.info(f"   MinIO 檔案名稱：{unique_filename}")
+    # ==========================================
+    # 修改：衣服圖片放在 clothes/ 資料夾下
+    # ==========================================
+    unique_filename = f"clothes/{unique_id}_{base_name}{format_info['ext']}"
+    logger.info(f"   MinIO 檔案名稱（含資料夾）：{unique_filename}")
 
     # 取得 MinIO 客戶端
     minio_client = get_minio_client()
@@ -1315,10 +1322,13 @@ def user_photo(request):
             {'ext': '.jpg', 'content_type': 'image/jpeg'}
         )
         
+        # ==========================================
+        # 修改：用戶模特照片放在 user-photos/ 資料夾下
+        # ==========================================
         # 產生唯一檔案名稱：user_uid + 時間戳 + 隨機ID
         unique_id = uuid.uuid4().hex[:8]
-        unique_filename = f"user_photo_{user_uid}_{unique_id}{format_info['ext']}"
-        logger.info(f"   MinIO 檔案名稱：{unique_filename}")
+        unique_filename = f"user-photos/user_photo_{user_uid}_{unique_id}{format_info['ext']}"
+        logger.info(f"   MinIO 檔案名稱（含資料夾）：{unique_filename}")
         
         # 取得 MinIO 客戶端
         minio_client = get_minio_client()
