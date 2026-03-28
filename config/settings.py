@@ -31,7 +31,18 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 # 允許的主機清單
 # 在生產環境中，應該設定為具體的域名
-ALLOWED_HOSTS = ['*']  # 開發環境允許所有主機，生產環境需要修改
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0',
+    'django-backend',  # Docker 容器名
+]
+
+# 可以透過環境變數擴展
+extra_hosts = os.getenv('DJANGO_ALLOWED_HOSTS', '').strip()
+if extra_hosts:
+    ALLOWED_HOSTS.extend([h.strip() for h in extra_hosts.split(',')])
+
 
 # Application definition
 # 應用程式定義
@@ -134,17 +145,20 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ============================================
+# 前端配置（用於 CORS 和重定向）
+# ============================================
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+
+# ============================================
 # CORS (跨域資源共享) 配置
 # ============================================
-# 允許所有來源進行跨域請求（開發環境）
-# 生產環境應該設定為具體的前端域名
-CORS_ALLOW_ALL_ORIGINS = True
+# 根據環境變數決定是否允許所有來源
+CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'False') == 'True'
 
-# 或者使用白名單（生產環境推薦）：
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:5173",  # Vite 開發伺服器
-#     "http://127.0.0.1:5173",
-# ]
+# CORS 白名單（前端地址）
+# 格式: 逗號分隔的 URL 列表
+cors_origins_str = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173')
+CORS_ALLOWED_ORIGINS = [url.strip() for url in cors_origins_str.split(',') if url.strip()]
 
 # 允許攜帶認證資訊（如 cookies）
 CORS_ALLOW_CREDENTIALS = True
@@ -205,6 +219,7 @@ SIMPLE_JWT = {
 # ============================================
 # MinIO 物件儲存配置
 MINIO_ENDPOINT = os.getenv('MINIO_ENDPOINT', 'localhost:9000')
+MINIO_CONTAINER_ENDPOINT = os.getenv('MINIO_CONTAINER_ENDPOINT', 'minio:9000')
 MINIO_ACCESS_KEY = os.getenv('MINIO_ACCESS_KEY', 'minioadmin')
 MINIO_SECRET_KEY = os.getenv('MINIO_SECRET_KEY', 'minioadmin')
 MINIO_BUCKET_NAME = os.getenv('MINIO_BUCKET_NAME', 'processed-images')
@@ -214,8 +229,37 @@ MINIO_SECURE = os.getenv('MINIO_SECURE', 'False') == 'True'
 # 前端瀏覽器需要用這個地址來訪問圖片
 MINIO_EXTERNAL_URL = os.getenv('MINIO_EXTERNAL_URL', 'http://localhost:9000')
 
-# AI 後端服務配置
-AI_BACKEND_URL = os.getenv('AI_BACKEND_URL', 'http://192.168.233.128:8002/virtual_try_on/clothes/remove_bg')
+# ==========================================
+# AI 後端配置（單一變數，用戶手動切換）
+# ==========================================
+# 【重點】AI_BACKEND_URL 是單一變數，用戶根據環境手動設置：
+# 
+# 本地開發（模擬 AI）：
+#   AI_BACKEND_URL=http://localhost:8002
+#
+# Docker 容器（模擬 AI）：
+#   AI_BACKEND_URL=http://172.17.0.1:8002
+#
+# 與組員協作（真實 AI）：
+#   AI_BACKEND_URL=http://[真實AI服務器IP]:8002
+#
+AI_BACKEND_URL = os.getenv(
+    'AI_BACKEND_URL', 
+    'http://localhost:8002'  # 預設為本地模擬 AI
+)
+
+# AI 虛擬試穿端點（相對於 AI_BACKEND_URL 的路徑）
+AI_VIRTUAL_TRY_ON_ENDPOINT = os.getenv(
+    'AI_VIRTUAL_TRY_ON_ENDPOINT',
+    '/virtual_try_on/clothes/combine'
+)
+
+# 組合完整的虛擬試穿 URL（為了向後相容）
+AI_BACKEND_VIRTUAL_TRY_ON_URL = (
+    AI_BACKEND_URL + AI_VIRTUAL_TRY_ON_ENDPOINT
+    if not AI_BACKEND_URL.endswith(AI_VIRTUAL_TRY_ON_ENDPOINT)
+    else AI_BACKEND_URL
+)
 
 # 檔案上傳配置
 UPLOAD_FOLDER = BASE_DIR / 'output'

@@ -29,6 +29,69 @@ from accounts.models import Clothes, User
 logger = logging.getLogger(__name__)
 
 
+def _convert_url_for_container(url):
+    """
+    將容器外部的 URL 轉換為容器內部可訪問的 URL。
+    
+    在 Docker 容器內部：
+    - localhost:9000 不可訪問，需要改用 minio:9000
+    - 192.168.x.x 可能不可訪問，需要改用 minio:9000 
+    """
+    if not url:
+        return url
+    
+    url_lower = url.lower()
+    
+    # 轉換 localhost/127.0.0.1
+    if 'localhost:' in url_lower or '127.0.0.1:' in url_lower:
+        # 替換所有可能的 localhost/127.0.0.1 引用
+        url = url.replace('localhost:', 'minio:').replace('localhost/', 'minio/')
+        url = url.replace('127.0.0.1:', 'minio:').replace('127.0.0.1/', 'minio/')
+        logger.warning(f'轉換 localhost/127.0.0.1 為 minio: {url}')
+        return url
+    
+    # 轉換 IP 地址（192.168.x.x 或其他內網/外網 IP）到 minio
+    if 'minio' not in url_lower:
+        # 檢查是否是 IP 地址引用
+        import re
+        ip_pattern = r'http[s]?://(?:\d+\.\d+\.\d+\.\d+|[^:/]+):\d+/.*minio'
+        if not re.match(ip_pattern, url, re.IGNORECASE):
+            # 如果包含特定的 IP 地址，轉換為 minio
+            url_temp = re.sub(
+                r'http[s]?://(?:\d+\.\d+\.\d+\.\d+|[^:]+):(\d+)',
+                lambda m: f'http://minio:{m.group(1)}',
+                url
+            )
+            if url_temp != url:
+                logger.warning(f'轉換外部 URL 為內部 URL: {url} -> {url_temp}')
+                return url_temp
+    
+    return url
+
+
+def _download_image_with_fallback(url, timeout=30):
+    """
+    嘗試下載圖片，如果失敗則嘗試轉換 URL 後重新下載。
+    
+    返回：response 物件
+    拋出：requests.exceptions.RequestException
+    """
+    try:
+        response = requests.get(url, timeout=timeout)
+        response.raise_for_status()
+        return response
+    except requests.exceptions.ConnectionError:
+        # 嘗試轉換 URL 後重新下載
+        converted_url = _convert_url_for_container(url)
+        if converted_url != url:
+            logger.info(f'原始 URL 連接失敗，嘗試轉換 URL：{url} -> {converted_url}')
+            response = requests.get(converted_url, timeout=timeout)
+            response.raise_for_status()
+            return response
+        else:
+            raise
+
+
 def _extract_filename(content_disposition, default_name='try_on_outfit.png'):
     """從 Content-Disposition 取出檔名。"""
     if not content_disposition:
@@ -181,30 +244,32 @@ def virtual_try_on(request):
                 'hint': '請先設定 user_image_url',
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        model_image_url = request.user.user_image_url
-        
-        # ⚠️ 檢測 localhost URL（Docker 容器內無法訪問）
-        if 'localhost:9000' in model_image_url or 'localhost:9001' in model_image_url:
-            model_image_url = model_image_url.replace('localhost:9000', 'minio:9000').replace('localhost:9001', 'minio:9001')
-            logger.warning(f'檢測到 localhost URL，已轉換為容器內 URL: {model_image_url}')
+        model_image_url = _convert_url_for_container(request.user.user_image_url)
         
         # 嘗試下載模特照片
         try:
-            model_img_resp = requests.get(model_image_url, timeout=30)
-            model_img_resp.raise_for_status()
+            model_img_resp = _download_image_with_fallback(model_image_url, timeout=30)
         except requests.exceptions.ConnectionError as e:
+            logger.error(f'❌ 無法連接到模特照片 URL：{model_image_url}，錯誤：{e}')
             return Response({
                 'success': False,
                 'message': '無法訪問模特照片 URL',
                 'error_code': 'MODEL_IMAGE_CONNECTION_ERROR',
-                'hint': 'user_image_url 可能使用了 localhost:9000，請改用 http://minio:9000',
+                'hint': 'user_image_url 可能配置不正確。在 Docker 容器內，必須使用 minio:9000 而不是 localhost:9000',
             }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-        except requests.exceptions.Timeout:
+        except requests.exceptions.Timeout as e:
+            logger.error(f'❌ 下載模特照片超時：{model_image_url}')
             return Response({
                 'success': False,
                 'message': '下載模特照片超時',
                 'error_code': 'MODEL_IMAGE_TIMEOUT',
             }, status=status.HTTP_504_GATEWAY_TIMEOUT)
+        except requests.exceptions.RequestException as e:
+            logger.error(f'❌ 下載模特照片失敗：{e}')
+            return Response({
+                'success': False,
+                'message': f'下載模特照片失敗：{str(e)}',
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         
         model_content_type = model_img_resp.headers.get('Content-Type', 'image/png')
 
@@ -212,9 +277,20 @@ def virtual_try_on(request):
         garments = []
         for idx, clothes in enumerate(ordered_clothes):
             try:
-                garment_resp = requests.get(clothes.clothes_image_url, timeout=30)
-                garment_resp.raise_for_status()
+                # 轉換衣服圖片 URL（如果需要）
+                clothes_url = _convert_url_for_container(clothes.clothes_image_url)
+                # 下載衣服圖片，並在失敗時重試
+                garment_resp = _download_image_with_fallback(clothes_url, timeout=30)
+            except requests.exceptions.ConnectionError as e:
+                logger.error(f'❌ 無法連接到衣服圖片 URL：{clothes.clothes_image_url}')
+                return Response({
+                    'success': False,
+                    'message': f'無法訪問衣服圖片：{clothes.clothes_uid}',
+                    'error_code': 'CLOTHES_IMAGE_CONNECTION_ERROR',
+                    'error_detail': str(e),
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
             except requests.exceptions.RequestException as e:
+                logger.error(f'❌ 下載衣服圖片失敗：{clothes.clothes_uid}，錯誤：{e}')
                 return Response({
                     'success': False,
                     'message': f'無法下載衣服圖片：{clothes.clothes_uid}',
@@ -225,29 +301,72 @@ def virtual_try_on(request):
             garments.append({
                 'type': garment_type,
                 'image': ('garment.png', garment_resp.content, 'image/png'),
+                'clothes': clothes,  # 保存衣服物件以便提取詳細信息
             })
 
         # 準備 AI 請求
-        ai_url = getattr(settings, 'AI_BACKEND_VIRTUAL_TRY_ON_URL', 'http://172.17.0.1:8002/virtual_try_on/clothes/combine')
+        # 使用 settings 中定義的 AI_BACKEND_VIRTUAL_TRY_ON_URL
+        ai_url = getattr(settings, 'AI_BACKEND_VIRTUAL_TRY_ON_URL', settings.AI_BACKEND_URL)
         
-        ai_files = {
-            'model_image': ('model.png', model_img_resp.content, model_content_type),
-        }
-        for i, (gtype, gimg) in enumerate([(g['type'], g['image']) for g in garments]):
-            ai_files[f'garment_{i}'] = gimg
+        # 準備 multipart files
+        # 注意：requests 庫支持將 files 參數設為列表，以發送多個同名的 file fields
+        ai_files_list = [
+            ('model_image', ('model.png', model_img_resp.content, model_content_type)),
+        ]
+        
+        # 添加衣服圖片到請求
+        # 使用列表格式，重複使用 'garment_images' 作為鍵名
+        for i, garment in enumerate(garments):
+            gimg = garment['image']
+            # 添加到列表（Flask 的 getlist('garment_images') 會接收所有這些值）
+            ai_files_list.append(('garment_images', gimg))
+            logger.info(f"📦 添加衣服圖片 {i}：{gimg[0]}，大小：{len(gimg[1])} bytes，類型：{garment['type']}")
+
+        # 準備 garments 的詳細信息（根據 FUNCTIONS.md 規範）
+        garments_data = []
+        for idx, garment in enumerate(garments):
+            clothes_obj = garment['clothes']
+            garment_info = {
+                'clothes_category': clothes_obj.clothes_category or 'clothing',
+                'garment_info': {}
+            }
+            
+            # 根據衣服類型添加相應的尺寸信息
+            if idx == 0:  # top
+                garment_info['garment_info']['clothes_arm_length'] = float(clothes_obj.clothes_arm_length or 0)
+                garment_info['garment_info']['clothes_shoulder_width'] = float(clothes_obj.clothes_shoulder_width or 0)
+            else:  # bottom
+                garment_info['garment_info']['clothes_leg_length'] = float(clothes_obj.clothes_leg_length or 0)
+                garment_info['garment_info']['clothes_waistline'] = float(clothes_obj.clothes_waistline or 0)
+            
+            garments_data.append(garment_info)
 
         ai_payload = {
             'model_info': json.dumps(model_info, ensure_ascii=False),
-            'garments': json.dumps([{'type': g['type']} for g in garments], ensure_ascii=False),
+            'garments': json.dumps(garments_data, ensure_ascii=False),
         }
 
+        logger.info(f"🤖 發送至 AI 後端：{ai_url}")
+        logger.info(f"   Model image：{len(model_img_resp.content)} bytes")
+        logger.info(f"   Garment images：{len(garments)} 件")
+        logger.info(f"   AI files format：List with {len(ai_files_list)} multipart fields")
+        logger.info(f"   Garments data：{json.dumps(garments_data, ensure_ascii=False)}")
+
         # 調用 AI 後端
-        ai_response = requests.post(
-            ai_url,
-            files=ai_files,
-            data=ai_payload,
-            timeout=120,
-        )
+        try:
+            ai_response = requests.post(
+                ai_url,
+                files=ai_files_list,
+                data=ai_payload,
+                timeout=120,
+            )
+        except requests.exceptions.RequestException as e:
+            logger.error(f"❌ 調用 AI 後端失敗：{e}")
+            return Response({
+                'success': False,
+                'message': f'AI 服務連接失敗：{str(e)}',
+                'error_code': 'AI_CONNECTION_ERROR',
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         if ai_response.status_code != 200:
             try:
