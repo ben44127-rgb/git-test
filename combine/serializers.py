@@ -18,7 +18,10 @@ class VirtualTryOnCreateSerializer(serializers.Serializer):
     
     用於驗證虛擬試衣請求
     
-    模特照片直接來自用戶個人檔案的 user_image_url
+    模特照片直接來自用戶個人檔案的 user_original_image_url
+    衣服圖片直接使用 clothes_original_image_url
+    
+    返回給前端的預覽圖片：user_image_url（處理後）和 clothes_image_url（去背圖）
     """
     outfit_uid = serializers.UUIDField(
         required=False,

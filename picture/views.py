@@ -20,6 +20,7 @@ Django Views for Image Processing API
 import io                    # 用來處理二進位資料流
 import os                    # 用來操作檔案系統
 import json                  # 用來解析 JSON 資料
+import time                  # 用來獲取時間戳
 import requests              # 用來發送 HTTP 請求給 AI 後端
 import uuid                  # 用來產生唯一的 ID
 import logging               # 用來記錄日誌
@@ -578,9 +579,46 @@ def upload_and_process(request):
         )
 
     # ==========================================
+    # 【步驟 5.5】上傳原始圖片到 MinIO（新增）
+    # ==========================================
+    logger.info("💾 開始上傳原始圖片到 MinIO...")
+
+    # 獲取原始圖片的副檔名
+    original_file_ext = os.path.splitext(image_file.name)[1] or '.png'
+    original_unique_id = uuid.uuid4().hex[:8]
+    original_filename = f"clothes/original/{original_unique_id}_{int(time.time())}{original_file_ext}"
+    logger.info(f"   原始圖片 MinIO 檔案名稱：{original_filename}")
+
+    original_image_url = None
+    minio_client_for_original = get_minio_client()
+
+    if minio_client_for_original:
+        try:
+            # 上傳原始圖片
+            file_data_original = io.BytesIO(file_bytes)
+            minio_client_for_original.put_object(
+                settings.MINIO_BUCKET_NAME,
+                original_filename,
+                file_data_original,
+                len(file_bytes),
+                content_type=image_file.content_type
+            )
+            logger.info(f"✅ 原始圖片成功上傳到 MinIO：{settings.MINIO_BUCKET_NAME}/{original_filename}")
+
+            # 生成原始圖片的公開 URL
+            original_image_url = f"{settings.MINIO_EXTERNAL_URL}/{settings.MINIO_BUCKET_NAME}/{original_filename}"
+            logger.info(f"✅ 原始圖片公開 URL：{original_image_url[:100]}...")
+
+        except Exception as e:
+            logger.warning(f"⚠️  原始圖片上傳失敗（可忽略）：{e}")
+            original_image_url = None
+    else:
+        logger.warning("⚠️  無法獲得 MinIO 客戶端，跳過原始圖片上傳")
+
+    # ==========================================
     # 【步驟 6】使用 AI 回傳的 file_name / file_format 儲存到 MinIO
     # ==========================================
-    logger.info("💾 開始上傳圖片到 MinIO...")
+    logger.info("💾 開始上傳去背圖片到 MinIO...")
 
     # 根據 file_format 決定副檔名和 content_type
     format_mapping = {
@@ -596,10 +634,10 @@ def upload_and_process(request):
     unique_id = uuid.uuid4().hex[:8]
     base_name = file_name.rsplit('.', 1)[0] if '.' in file_name else file_name
     # ==========================================
-    # 修改：衣服圖片放在 clothes/ 資料夾下
+    # 修改：衣服圖片放在 clothes/processed 資料夾下
     # ==========================================
-    unique_filename = f"clothes/{unique_id}_{base_name}{format_info['ext']}"
-    logger.info(f"   MinIO 檔案名稱（含資料夾）：{unique_filename}")
+    unique_filename = f"clothes/processed/{unique_id}_{base_name}{format_info['ext']}"
+    logger.info(f"   去背圖片 MinIO 檔案名稱（含資料夾）：{unique_filename}")
 
     # 取得 MinIO 客戶端
     minio_client = get_minio_client()
@@ -719,18 +757,21 @@ def upload_and_process(request):
     try:
         clothes_uid = str(uuid.uuid4())
 
-        # 建立 Clothes 記錄（包含衣服尺寸）
+        # 建立 Clothes 記錄（包含衣服尺寸和原始圖片URL）
         clothes = Clothes.objects.create(
             f_user_uid=user_uid,
             clothes_uid=clothes_uid,
             clothes_category=clothes_category,
-            clothes_image_url=image_url,
+            clothes_image_url=image_url,  # 去背後的圖片
+            clothes_original_image_url=original_image_url or '',  # 原始圖片
             clothes_arm_length=clothes_arm_length,
             clothes_leg_length=clothes_leg_length,
             clothes_shoulder_width=clothes_shoulder_width,
             clothes_waistline=clothes_waistline,
         )
         logger.info(f"✅ 建立衣服記錄：clothes_uid={clothes_uid}, category={clothes_category}")
+        logger.info(f"   去背圖片 URL：{image_url[:80]}...")
+        logger.info(f"   原始圖片 URL：{(original_image_url or '無')[:80]}...")
         logger.info(f"   尺寸：袖長={clothes_arm_length}cm, 褲長={clothes_leg_length}cm, 肩寬={clothes_shoulder_width}cm, 腰圍={clothes_waistline}cm")
 
         # 建立 Style 記錄（3筆，每筆鏈結到同一件 clothes）
@@ -1498,12 +1539,13 @@ def user_photo(request):
             final_content_type = 'image/png'
         
         # ==========================================
-        # 修改：用戶模特照片放在 user-photos/ 資料夾下
+        # 【步驟 9】上傳原始圖片到 MinIO（新增）
         # ==========================================
-        # 產生唯一檔案名稱：user_uid + 時間戳 + 隨機ID
-        unique_id = uuid.uuid4().hex[:8]
-        unique_filename = f"user-photos/model_photo_{user_uid}_{unique_id}{final_ext}"
-        logger.info(f"   MinIO 檔案名稱（含資料夾）：{unique_filename}")
+        logger.info("💾 開始上傳原始模特照片到 MinIO...")
+        
+        original_unique_id = uuid.uuid4().hex[:8]
+        original_filename = f"user-photos/original/{original_unique_id}_{int(time.time())}{format_info['ext']}"
+        logger.info(f"   原始圖片 MinIO 檔案名稱：{original_filename}")
         
         # 取得 MinIO 客戶端
         minio_client = get_minio_client()
@@ -1517,8 +1559,35 @@ def user_photo(request):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
         
-        # 【步驟 9】上傳 AI 處理後的圖片到 MinIO
-        logger.info("💾 開始上傳 AI 處理後的圖片到 MinIO...")
+        original_image_url = None
+        try:
+            # 上傳原始圖片
+            file_data_original = io.BytesIO(file_bytes)
+            minio_client.put_object(
+                settings.MINIO_BUCKET_NAME,
+                original_filename,
+                file_data_original,
+                len(file_bytes),
+                content_type=photo_file.content_type
+            )
+            logger.info(f"✅ 原始圖片成功上傳到 MinIO：{settings.MINIO_BUCKET_NAME}/{original_filename}")
+            
+            # 生成原始圖片的公開 URL
+            original_image_url = f"{settings.MINIO_EXTERNAL_URL}/{settings.MINIO_BUCKET_NAME}/{original_filename}"
+            logger.info(f"✅ 原始圖片公開 URL：{original_image_url[:100]}...")
+        except Exception as e:
+            logger.warning(f"⚠️  原始圖片上傳失敗（可忽略）：{e}")
+            original_image_url = None
+        
+        # ==========================================
+        # 【步驟 10】上傳 AI 處理後的去背圖片到 MinIO
+        # ==========================================
+        logger.info("💾 開始上傳 AI 處理後的去背圖片到 MinIO...")
+        
+        # 產生唯一檔案名稱：user_uid + 時間戳 + 隨機ID
+        unique_id = uuid.uuid4().hex[:8]
+        unique_filename = f"user-photos/processed/model_photo_{user_uid}_{unique_id}{final_ext}"
+        logger.info(f"   去背圖片 MinIO 檔案名稱（含資料夾）：{unique_filename}")
         
         try:
             file_data = io.BytesIO(processed_image)
@@ -1553,7 +1622,7 @@ def user_photo(request):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
-        # 【步驟 10】產生公開 URL
+        # 【步驟 11】產生公開 URL
         try:
             public_url = f"{settings.MINIO_EXTERNAL_URL}/{settings.MINIO_BUCKET_NAME}/{unique_filename}"
             logger.info(f"✅ 公開 URL：{public_url[:100]}...")
@@ -1561,11 +1630,13 @@ def user_photo(request):
             logger.error(f"❌ 產生 URL 失敗：{e}")
             public_url = None
         
-        # 【步驟 11】更新 User 表中的 user_image_url 欄位
+        # 【步驟 12】更新 User 表中的 user_image_url 和 user_original_image_url 欄位
         try:
-            user.user_image_url = public_url
+            user.user_image_url = public_url  # 去背圖（給前端顯示）
+            user.user_original_image_url = original_image_url or ''  # 原始圖（給AI後端）
             user.save()
-            logger.info(f"✅ 已更新用戶的 user_image_url")
+            logger.info(f"✅ 已更新用戶的 user_image_url（去背圖）")
+            logger.info(f"✅ 已更新用戶的 user_original_image_url（原始圖）")
         except Exception as e:
             logger.error(f"❌ 更新用戶資訊失敗：{e}")
             return Response(
@@ -1580,20 +1651,22 @@ def user_photo(request):
         logger.info("✅ 用戶模型照片上傳成功（經 AI 去背處理）")
         logger.info("=" * 50)
         
-        # 【步驟 12】返回成功響應
+        # 【步驟 13】返回成功響應
         return Response(
             {
                 'success': True,
                 'message': '模型照片已上傳（已進行 AI 去背處理）',
                 'photo_data': {
-                    'photo_url': public_url,
+                    'photo_url': public_url,  # 去背圖，給前端顯示
+                    'original_photo_url': original_image_url,  # 原始圖，給AI後端使用
                     'uploaded_at': user.updated_at.isoformat() if hasattr(user, 'updated_at') else None,
-                    'note': '此照片已經過 AI 去背處理，已保存為虛擬試穿用的模特照片'
+                    'note': '此照片已經過 AI 去背處理，去背圖保存為虛擬試穿用的模特照片，原始圖用於 AI 後端合成'
                 },
                 'user': {
                     'user_uid': user_uid,
                     'user_name': user.user_name,
-                    'user_image_url': public_url,
+                    'user_image_url': public_url,  # 去背圖
+                    'user_original_image_url': original_image_url or '',  # 原始圖
                     'updated_at': user.updated_at.isoformat() if hasattr(user, 'updated_at') else None
                 },
                 'ai_status': {
@@ -1658,20 +1731,35 @@ def user_photo(request):
         user_uid = str(user.user_uid)
         logger.info(f"👤 用戶 UID: {user_uid}")
         
-        # 【步驟 0】保存舊照片 URL（稍後用於刪除）
-        old_photo_url = user.user_image_url
-        old_filename = None
+        # 【步驟 0】保存舊照片 URL（稍後用於刪除去背圖和原始圖）
+        old_photo_url = user.user_image_url  # 舊去背圖
+        old_original_photo_url = user.user_original_image_url  # 舊原始圖
+        old_filename = None  # 舊去背圖的檔案名稱
+        old_original_filename = None  # 舊原始圖的檔案名稱
+        
         if old_photo_url:
             # 從 URL 中提取檔案名稱
-            # URL 格式：http://minio.example.com/bucket-name/user-photos/user_photo_xxx.jpg
+            # URL 格式：http://minio.example.com/bucket-name/user-photos/processed/user_photo_xxx.jpg
             try:
                 # 提取路徑部分（從 bucket 後開始）
                 parts = old_photo_url.split(f"/{settings.MINIO_BUCKET_NAME}/")
                 if len(parts) > 1:
-                    old_filename = parts[1]  # 例如：user-photos/user_photo_xxx.jpg
-                    logger.info(f"📝 舊照片檔案名稱：{old_filename}")
+                    old_filename = parts[1]  # 例如：user-photos/processed/user_photo_xxx.jpg
+                    logger.info(f"📝 舊去背圖檔案名稱：{old_filename}")
             except Exception as e:
-                logger.warning(f"⚠️  無法提取舊照片檔案名稱：{e}")
+                logger.warning(f"⚠️  無法提取舊去背圖檔案名稱：{e}")
+        
+        if old_original_photo_url:
+            # 從 URL 中提取檔案名稱
+            # URL 格式：http://minio.example.com/bucket-name/user-photos/original/xxx.jpg
+            try:
+                # 提取路徑部分（從 bucket 後開始）
+                parts = old_original_photo_url.split(f"/{settings.MINIO_BUCKET_NAME}/")
+                if len(parts) > 1:
+                    old_original_filename = parts[1]  # 例如：user-photos/original/xxx.jpg
+                    logger.info(f"📝 舊原始圖檔案名稱：{old_original_filename}")
+            except Exception as e:
+                logger.warning(f"⚠️  無法提取舊原始圖檔案名稱：{e}")
         
         # 【步驟 1】檢查請求是否包含 photo_file 欄位
         if 'photo_file' not in request.FILES:
@@ -1896,11 +1984,6 @@ def user_photo(request):
             final_ext = '.png'
             final_content_type = 'image/png'
         
-        # 產生唯一檔案名稱：user_uid + 時間戳 + 隨機ID
-        unique_id = uuid.uuid4().hex[:8]
-        unique_filename = f"user-photos/model_photo_{user_uid}_{unique_id}{final_ext}"
-        logger.info(f"   新照片檔案名稱（含資料夾）：{unique_filename}")
-        
         # 取得 MinIO 客戶端
         minio_client = get_minio_client()
         if minio_client is None:
@@ -1913,8 +1996,40 @@ def user_photo(request):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
         
-        # 【步驟 9】上傳 AI 處理後的圖片到 MinIO
-        logger.info("💾 開始上傳 AI 處理後的圖片到 MinIO...")
+        # 【步驟 9】上傳原始圖片到 MinIO（新增）
+        logger.info("💾 開始上傳原始模特照片到 MinIO...")
+        
+        original_unique_id = uuid.uuid4().hex[:8]
+        original_filename = f"user-photos/original/{original_unique_id}_{int(time.time())}{format_info['ext']}"
+        logger.info(f"   原始圖片 MinIO 檔案名稱：{original_filename}")
+        
+        original_image_url = None
+        try:
+            # 上傳原始圖片
+            file_data_original = io.BytesIO(file_bytes)
+            minio_client.put_object(
+                settings.MINIO_BUCKET_NAME,
+                original_filename,
+                file_data_original,
+                len(file_bytes),
+                content_type=photo_file.content_type
+            )
+            logger.info(f"✅ 原始圖片成功上傳到 MinIO：{settings.MINIO_BUCKET_NAME}/{original_filename}")
+            
+            # 生成原始圖片的公開 URL
+            original_image_url = f"{settings.MINIO_EXTERNAL_URL}/{settings.MINIO_BUCKET_NAME}/{original_filename}"
+            logger.info(f"✅ 原始圖片公開 URL：{original_image_url[:100]}...")
+        except Exception as e:
+            logger.warning(f"⚠️  原始圖片上傳失敗（可忽略）：{e}")
+            original_image_url = None
+        
+        # 【步驟 10】上傳 AI 處理後的去背圖片到 MinIO
+        logger.info("💾 開始上傳 AI 處理後的去背圖片到 MinIO...")
+        
+        # 產生唯一檔案名稱：user_uid + 隨機ID
+        unique_id = uuid.uuid4().hex[:8]
+        unique_filename = f"user-photos/processed/model_photo_{user_uid}_{unique_id}{final_ext}"
+        logger.info(f"   去背圖片檔案名稱（含資料夾）：{unique_filename}")
         
         try:
             file_data = io.BytesIO(processed_image)
@@ -1949,19 +2064,21 @@ def user_photo(request):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
-        # 【步驟 10】產生公開 URL
+        # 【步驟 11】產生公開 URL
         try:
             public_url = f"{settings.MINIO_EXTERNAL_URL}/{settings.MINIO_BUCKET_NAME}/{unique_filename}"
-            logger.info(f"✅ 新照片 URL：{public_url[:100]}...")
+            logger.info(f"✅ 新去背圖片 URL：{public_url[:100]}...")
         except Exception as e:
             logger.error(f"❌ 產生 URL 失敗：{e}")
             public_url = None
         
-        # 【步驟 7】更新 User 表中的 user_image_url 欄位（覆蓋舊照片）
+        # 【步驟 12】更新 User 表中的 user_image_url 和 user_original_image_url 欄位（覆蓋舊照片）
         try:
-            user.user_image_url = public_url
+            user.user_image_url = public_url  # 去背圖（給前端顯示）
+            user.user_original_image_url = original_image_url or ''  # 原始圖（給AI後端）
             user.save()
-            logger.info(f"✅ 已更新用戶的 user_image_url（覆蓋舊照片）")
+            logger.info(f"✅ 已更新用戶的 user_image_url（去背圖）")
+            logger.info(f"✅ 已更新用戶的 user_original_image_url（原始圖）")
         except Exception as e:
             logger.error(f"❌ 更新用戶資訊失敗：{e}")
             return Response(
@@ -1972,39 +2089,59 @@ def user_photo(request):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
-        # 【步驟 8】刪除 MinIO 中的舊照片（可選，但推薦）
+        # 【步驟 13】刪除 MinIO 中的舊照片（可選，但推薦）
+        logger.info("🗑️  開始刪除舊照片...")
+        
+        # 刪除舊去背圖
         if old_filename:
-            logger.info(f"🗑️  開始刪除舊照片：{old_filename}")
+            logger.info(f"🗑️  開始刪除舊去背圖：{old_filename}")
             try:
                 minio_client.remove_object(
                     settings.MINIO_BUCKET_NAME,
                     old_filename
                 )
-                logger.info(f"✅ 成功刪除舊照片：{old_filename}")
+                logger.info(f"✅ 成功刪除舊去背圖：{old_filename}")
             except S3Error as e:
                 # 如果舊照片不存在或刪除失敗，只記錄警告，不影響更新成功
-                logger.warning(f"⚠️  刪除舊照片失敗（可能已刪除）：{e}")
+                logger.warning(f"⚠️  刪除舊去背圖失敗（可能已刪除）：{e}")
             except Exception as e:
-                logger.warning(f"⚠️  刪除舊照片過程出錯：{e}")
+                logger.warning(f"⚠️  刪除舊去背圖過程出錯：{e}")
+        
+        # 刪除舊原始圖
+        if old_original_filename:
+            logger.info(f"🗑️  開始刪除舊原始圖：{old_original_filename}")
+            try:
+                minio_client.remove_object(
+                    settings.MINIO_BUCKET_NAME,
+                    old_original_filename
+                )
+                logger.info(f"✅ 成功刪除舊原始圖：{old_original_filename}")
+            except S3Error as e:
+                # 如果舊照片不存在或刪除失敗，只記錄警告，不影響更新成功
+                logger.warning(f"⚠️  刪除舊原始圖失敗（可能已刪除）：{e}")
+            except Exception as e:
+                logger.warning(f"⚠️  刪除舊原始圖過程出錯：{e}")
         
         logger.info("=" * 50)
         logger.info("✅ 用戶模型照片更新成功（經 AI 去背處理，舊照片已刪除）")
         logger.info("=" * 50)
         
-        # 【步驟 13】返回成功響應
+        # 【步驟 14】返回成功響應
         return Response(
             {
                 'success': True,
                 'message': '模型照片已更新（已進行 AI 去背處理，舊照片已刪除）',
                 'photo_data': {
-                    'photo_url': public_url,
+                    'photo_url': public_url,  # 去背圖，給前端顯示
+                    'original_photo_url': original_image_url,  # 原始圖，給AI後端使用
                     'uploaded_at': user.updated_at.isoformat() if hasattr(user, 'updated_at') else None,
-                    'note': '此照片已經過 AI 去背處理，已保存為虛擬試穿用的模特照片'
+                    'note': '此照片已經過 AI 去背處理，去背圖保存為虛擬試穿用的模特照片，原始圖用於 AI 後端合成'
                 },
                 'user': {
                     'user_uid': user_uid,
                     'user_name': user.user_name,
-                    'user_image_url': public_url,
+                    'user_image_url': public_url,  # 去背圖
+                    'user_original_image_url': original_image_url or '',  # 原始圖
                     'updated_at': user.updated_at.isoformat() if hasattr(user, 'updated_at') else None
                 },
                 'ai_status': {

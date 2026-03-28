@@ -180,6 +180,14 @@ def virtual_try_on(request):
         "clothes_ids": ["uuid1", "uuid2"]
     }
     
+    自動使用原始圖片給 AI 後端：
+    - 模特圖片：優先使用 user_original_image_url（原始模特照片）
+    - 衣服圖片：優先使用 clothes_original_image_url（原始衣服照片）
+    
+    返回給前端的預覽圖片：
+    - 模特圖片：user_image_url（處理後）
+    - 衣服圖片：clothes_image_url（去背圖）
+    
     返回示例：
     {
         "success": true,
@@ -220,6 +228,11 @@ def virtual_try_on(request):
             'user_waistline': float(request.user.user_waistline or 75),
             'user_leg_length': float(request.user.user_leg_length or 95),
         }
+        
+        # AI 後端合成使用原始圖片
+        logger.info(f"🎨 虛擬試穿配置：")
+        logger.info(f"   AI 後端使用：原始模特照片 + 原始衣服照片")
+        logger.info(f"   前端預覽：處理後模特照片 + 去背衣服圖片")
 
         # 依照輸入順序載入衣服資料
         clothes_qs = Clothes.objects.filter(
@@ -235,16 +248,21 @@ def virtual_try_on(request):
                 'message': '衣服不存在或不屬於當前使用者',
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # 獲取用戶模特照片（直接從 User.user_image_url）
-        if not request.user.user_image_url:
+        # 獲取用戶模特照片
+        # 🔑 優先使用原始照片給 AI 後端合成
+        if request.user.user_original_image_url:
+            model_image_url = _convert_url_for_container(request.user.user_original_image_url)
+            logger.info(f"📸 使用原始模特照片進行 AI 後端合成")
+        elif request.user.user_image_url:
+            model_image_url = _convert_url_for_container(request.user.user_image_url)
+            logger.warning(f"⚠️  原始模特照片不存在，使用現有照片")
+        else:
             return Response({
                 'success': False,
                 'message': '用戶未設定模特照片',
                 'error_code': 'USER_MODEL_IMAGE_NOT_SET',
-                'hint': '請先設定 user_image_url',
+                'hint': '請先設定 user_original_image_url 或 user_image_url',
             }, status=status.HTTP_400_BAD_REQUEST)
-
-        model_image_url = _convert_url_for_container(request.user.user_image_url)
         
         # 嘗試下載模特照片
         try:
@@ -277,12 +295,23 @@ def virtual_try_on(request):
         garments = []
         for idx, clothes in enumerate(ordered_clothes):
             try:
+                # 🔑 優先使用原始圖片給 AI 後端合成
+                # 如果原始圖不存在，才回退到去背圖
+                if clothes.clothes_original_image_url:
+                    clothes_image_to_use = clothes.clothes_original_image_url
+                    image_type = "原始圖"
+                    logger.info(f"   衣服 {idx+1}：使用 {image_type}（AI 後端合成用）")
+                else:
+                    clothes_image_to_use = clothes.clothes_image_url
+                    image_type = "去背圖"
+                    logger.warning(f"   衣服 {idx+1}：原始圖不存在，回退到 {image_type}")
+                
                 # 轉換衣服圖片 URL（如果需要）
-                clothes_url = _convert_url_for_container(clothes.clothes_image_url)
+                clothes_url = _convert_url_for_container(clothes_image_to_use)
                 # 下載衣服圖片，並在失敗時重試
                 garment_resp = _download_image_with_fallback(clothes_url, timeout=30)
             except requests.exceptions.ConnectionError as e:
-                logger.error(f'❌ 無法連接到衣服圖片 URL：{clothes.clothes_image_url}')
+                logger.error(f'❌ 無法連接到衣服圖片 URL：{clothes_image_to_use}')
                 return Response({
                     'success': False,
                     'message': f'無法訪問衣服圖片：{clothes.clothes_uid}',
