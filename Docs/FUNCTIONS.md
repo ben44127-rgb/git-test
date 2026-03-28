@@ -565,7 +565,7 @@
 - 虛擬試穿會自動讀取用戶的 `user_image_url`，如未設定則返回400錯誤
 - 一個用戶只能有一張當前活跃的模特照片
 
-#### 2.3.1 上傳/更新模特照片
+#### 2.3.1 上傳模特照片
 **HTTP 方法**: `POST`
 **API 路徑**: `/picture/user/photo`
 
@@ -607,13 +607,65 @@
   - `500 Internal Server Error`: 伺服器內部錯誤
 
 **📝 操作說明**:
-- 上傳新照片會自動覆蓋舊照片（更新 `user_image_url`）
+- 用於**首次上傳**模特照片
+- 上傳照片會保存為用戶的虛擬試穿模特照片
+- 新的 `user_image_url` 會立即用於虛擬試穿功能
+- 推薦上傳全身照以獲得最佳虛擬試穿效果
+- 如需更新已上傳的照片，請使用 PUT 方法（見 2.3.2.1）
+
+---
+
+#### 2.3.2 更新或查看模特照片
+
+##### 2.3.2.1 更新模特照片
+**HTTP 方法**: `PUT`
+**API 路徑**: `/picture/user/photo`
+
+- **輸入參數** (form-data):
+  ```
+  photo_file: <二進位圖片檔案> (JPG, PNG, GIF, WebP，最大 10MB)
+  ```
+
+- **Headers**:
+  ```
+  Authorization: Bearer <access_token>
+  Content-Type: multipart/form-data
+  ```
+
+- **成功回應 (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "message": "模特照片更新成功，已自動更新為虛擬試穿用的模特照片",
+    "photo_data": {
+      "photo_url": "http://minio.example.com/bucket/user_uuid_photo_timestamp.png",
+      "uploaded_at": "2026-03-28T10:00:00Z",
+      "note": "此照片已保存為用戶的虛擬試穿模特照片"
+    },
+    "user": {
+      "user_uid": "550e8400-e29b-41d4-a716-446655440000",
+      "user_name": "john_doe",
+      "user_image_url": "http://minio.example.com/bucket/user_uuid_photo_timestamp.png",
+      "updated_at": "2026-03-28T10:00:00Z"
+    }
+  }
+  ```
+
+- **失敗回應**:
+  - `400 Bad Request`: 缺少檔案參數或檔案過大
+  - `401 Unauthorized`: Token 無效或過期
+  - `415 Unsupported Media Type`: 不支持的檔案類型 (僅接受 JPG、PNG、GIF、WebP)
+  - `503 Service Unavailable`: MinIO 存儲服務不可用
+  - `500 Internal Server Error`: 伺服器內部錯誤
+
+**📝 操作說明**:
+- 更新照片會自動覆蓋舊照片（替換 `user_image_url`）
 - 新的 `user_image_url` 會立即用於虛擬試穿功能
 - 推薦上傳全身照以獲得最佳虛擬試穿效果
 
 ---
 
-#### 2.3.2 查看當前模特照片
+##### 2.3.2.2 查看當前模特照片
 **HTTP 方法**: `GET`
 **API 路徑**: `/picture/user/photo`
 
@@ -650,17 +702,19 @@
 
 ---
 
-**📊 操作表** ⭐ 用戶模特照片管理（簡化設計）：
+**📊 操作表** ⭐ 用戶模特照片管理：
 
 | HTTP 方法 | API 路徑 | 操作 | 說明 | 返回狀態碼 |
 |----------|---------|------|------|----------|
-| **POST** | `/picture/user/photo` | ⬆️ 上傳/更新照片 | 上傳新照片並自動更新 user_image_url | 201/200 |
+| **POST** | `/picture/user/photo` | ⬆️ 上傳照片 | 首次上傳模特照片並保存 user_image_url | 201/200 |
+| **PUT** | `/picture/user/photo` | 🔄 更新照片 | 更新現有的模特照片，覆蓋舊照片 | 200 |
 | **GET** | `/picture/user/photo` | 👁️ 查看當前照片 | 查看當前的模特照片 URL | 200 |
 
 **✅ 確認設計**:
-- 簡化為只需 2 個操作：上傳和查看
+- 支持 3 種操作：上傳、更新和查看
 - 一個用戶同時只有 1 張活跃的模特照片
-- 上傳新照片會覆蓋舊照片（實現自動更新）
+- POST 用於初次上傳，PUT 用於後續更新
+- 上傳或更新照片會覆蓋舊照片（實現自動更新）
 - 虛擬試穿會自動讀取 user_image_url，無須額外操作
 
 ---

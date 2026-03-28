@@ -1170,7 +1170,7 @@ def clothes_detail(request, clothes_uid):
 # ==========================================
 # 【用戶模型照片管理 API】
 # ==========================================
-@api_view(['POST', 'GET'])
+@api_view(['POST', 'GET', 'PUT'])
 @permission_classes([IsAuthenticated])
 def user_photo(request):
     """
@@ -1180,7 +1180,7 @@ def user_photo(request):
     - 上傳/更新用戶的模型照片
     - 獲取用戶當前的模型照片 URL
     
-    POST 請求：上傳或更新用戶模型照片
+    POST 請求：上傳用戶模型照片（首次上傳）
     =====================================
     請求位址：POST /picture/user/photo
     認證方式：JWT Token (Authorization: Bearer <token>)
@@ -1191,9 +1191,9 @@ def user_photo(request):
     
     允許的格式：JPG, PNG, GIF, WebP
     最大大小：10MB
-    功能：每個用戶只能擁有一張模型照片，新上傳會覆蓋舊照片
+    功能：上傳用戶的模型照片
     
-    成功響應（201 Created 或 200 OK）：
+    成功響應（201 Created）：
     {
         "success": true,
         "message": "模型照片已上傳",
@@ -1204,12 +1204,29 @@ def user_photo(request):
         }
     }
     
-    錯誤響應：
-    - 400 Bad Request: 未提供 photo_file 或格式/大小不符
-    - 401 Unauthorized: 未提供 JWT Token 或 Token 無效
-    - 403 Forbidden: 無法修改他人的照片
-    - 500 Internal Server Error: 伺服器錯誤
+    PUT 請求：更新用戶模型照片
+    =====================================
+    請求位址：PUT /picture/user/photo
+    認證方式：JWT Token (Authorization: Bearer <token>)
+    Content-Type: multipart/form-data
     
+    請求參數：
+    - photo_file: 圖片檔案（二進位，必填）
+    
+    允許的格式：JPG, PNG, GIF, WebP
+    最大大小：10MB
+    功能：更新用戶的模型照片，會覆蓋舊照片
+    
+    成功響應（200 OK）：
+    {
+        "success": true,
+        "message": "模型照片已更新",
+        "data": {
+            "user_uid": "user_123",
+            "user_image_url": "http://minio:9000/bucket/photo.jpg",
+            "upload_time": "2024-01-01T12:00:00Z"
+        }
+    }
     
     GET 請求：獲取當前用戶的模型照片 URL
     =====================================
@@ -1234,7 +1251,9 @@ def user_photo(request):
     }
     
     錯誤響應：
+    - 400 Bad Request: 未提供 photo_file 或格式/大小不符
     - 401 Unauthorized: 未提供 JWT Token 或 Token 無效
+    - 403 Forbidden: 無法修改他人的照片
     - 500 Internal Server Error: 伺服器錯誤
     """
     
@@ -1307,8 +1326,11 @@ def user_photo(request):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
-        # 【步驟 5】上傳到 MinIO
-        logger.info("💾 開始上傳圖片到 MinIO...")
+        # 【步驟 5】轉發給 AI 後端進行去背處理（模特照片）
+        logger.info("🤖 準備轉發給 AI 後端進行去背處理...")
+        
+        # 重新建立文件對象供 AI 後端使用
+        photo_file.seek(0)
         
         # 決定副檔名和 content_type
         format_mapping = {
@@ -1322,12 +1344,165 @@ def user_photo(request):
             {'ext': '.jpg', 'content_type': 'image/jpeg'}
         )
         
+        # 準備發送給 AI 後端的文件
+        files = {
+            'model_image': (f'model_image{format_info["ext"]}', io.BytesIO(file_bytes), photo_file.content_type)
+        }
+        
+        # 發送 POST 請求給 AI 後端（模特照片去背處理）
+        # 路由：/virtual_try_on/fitting/modules
+        ai_fitting_url = f"{settings.AI_BACKEND_URL}/virtual_try_on/fitting/modules"
+        logger.info(f"🔗 AI 端點 URL：{ai_fitting_url}")
+        
+        try:
+            ai_response = requests.post(
+                ai_fitting_url,
+                files=files,
+                timeout=120  # 120秒逾時
+            )
+        except requests.exceptions.Timeout:
+            logger.error("❌ AI 後端請求超時")
+            return Response(
+                {
+                    'success': False,
+                    'message': 'AI 後端處理超時'
+                },
+                status=status.HTTP_504_GATEWAY_TIMEOUT
+            )
+        except requests.exceptions.ConnectionError:
+            logger.error("❌ 無法連接到 AI 後端")
+            return Response(
+                {
+                    'success': False,
+                    'message': 'AI 後端服務不可用'
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        except Exception as e:
+            logger.error(f"❌ 轉發給 AI 後端失敗：{e}")
+            return Response(
+                {
+                    'success': False,
+                    'message': f'轉發給 AI 後端失敗：{str(e)}'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        ai_status_code = ai_response.status_code
+        logger.info(f"✅ AI 後端響應狀態碼：{ai_status_code}")
+        
+        # 【步驟 6】檢查 AI 後端響應
+        if ai_status_code != 200:
+            logger.error(f"❌ AI 後端處理失敗（狀態碼：{ai_status_code}）")
+            try:
+                error_detail = ai_response.json()
+                logger.error(f"   錯誤詳情：{error_detail}")
+            except Exception:
+                error_detail = ai_response.text[:200]
+                logger.error(f"   原始響應：{error_detail}")
+            
+            return Response(
+                {
+                    'success': False,
+                    'message': 'AI 去背處理失敗',
+                    'ai_status': {
+                        'status_code': ai_status_code,
+                        'message': f'AI 後端返回狀態碼 {ai_status_code}'
+                    }
+                },
+                status=ai_status_code if ai_status_code >= 400 and ai_status_code < 600 else 500
+            )
+        
+        # 【步驟 7】解析 AI 返回的 multipart 回應
+        logger.info("🔍 開始解析 AI 返回的 multipart 回應...")
+        
+        content_type = ai_response.headers.get('Content-Type', '')
+        logger.info(f"   AI 響應的 Content-Type: {content_type}")
+        
+        json_data = None
+        processed_image = None
+        
+        if 'multipart' in content_type:
+            # ---- 解析 multipart 回應 ----
+            multipart_data = multipart_decoder.MultipartDecoder(
+                ai_response.content, content_type
+            )
+            
+            for part in multipart_data.parts:
+                # 解析每個 part 的 headers
+                part_content_type = ''
+                for header_name, header_value in part.headers.items():
+                    h_name = header_name.decode() if isinstance(header_name, bytes) else header_name
+                    h_value = header_value.decode() if isinstance(header_value, bytes) else header_value
+                    if h_name.lower() == 'content-type':
+                        part_content_type = h_value
+                
+                # 判斷 part 類型
+                if 'application/json' in part_content_type:
+                    json_data = json.loads(part.content.decode('utf-8'))
+                    logger.info("✅ 解析到 JSON 元數據")
+                elif 'image' in part_content_type:
+                    processed_image = part.content
+                    logger.info(f"✅ 解析到處理後圖片，大小：{len(processed_image)} bytes")
+        else:
+            logger.warning("⚠️ AI 回應非 multipart 格式，嘗試向後兼容解析")
+            try:
+                json_data = ai_response.json()
+            except Exception:
+                processed_image = ai_response.content
+        
+        # 驗證是否成功取得所有資料
+        if not json_data:
+            logger.error("❌ AI 返回的資料缺少 JSON 元數據")
+            return Response(
+                {
+                    'success': False,
+                    'message': 'AI 返回的資料格式錯誤：缺少 JSON 元數據'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        if not processed_image or len(processed_image) == 0:
+            logger.error("❌ AI 返回的圖片資料為空")
+            return Response(
+                {
+                    'success': False,
+                    'message': 'AI 返回的圖片資料為空'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        logger.info(f"✅ 成功解析 AI 回應：JSON 元數據 + 圖片二進制數據")
+        
+        # 【步驟 8】提取 AI 回傳的文件名和格式
+        ai_file_name = json_data.get('data', {}).get('file_name', f'model_photo_{user_uid}.png')
+        ai_file_format = json_data.get('data', {}).get('file_format', 'PNG')
+        logger.info(f"   AI 返回的文件名：{ai_file_name}")
+        logger.info(f"   AI 返回的文件格式：{ai_file_format}")
+        
+        # 決定最終的副檔名
+        if ai_file_format.upper() == 'PNG':
+            final_ext = '.png'
+            final_content_type = 'image/png'
+        elif ai_file_format.upper() in ['JPG', 'JPEG']:
+            final_ext = '.jpg'
+            final_content_type = 'image/jpeg'
+        elif ai_file_format.upper() == 'GIF':
+            final_ext = '.gif'
+            final_content_type = 'image/gif'
+        elif ai_file_format.upper() == 'WEBP':
+            final_ext = '.webp'
+            final_content_type = 'image/webp'
+        else:
+            final_ext = '.png'
+            final_content_type = 'image/png'
+        
         # ==========================================
         # 修改：用戶模特照片放在 user-photos/ 資料夾下
         # ==========================================
         # 產生唯一檔案名稱：user_uid + 時間戳 + 隨機ID
         unique_id = uuid.uuid4().hex[:8]
-        unique_filename = f"user-photos/user_photo_{user_uid}_{unique_id}{format_info['ext']}"
+        unique_filename = f"user-photos/model_photo_{user_uid}_{unique_id}{final_ext}"
         logger.info(f"   MinIO 檔案名稱（含資料夾）：{unique_filename}")
         
         # 取得 MinIO 客戶端
@@ -1342,20 +1517,22 @@ def user_photo(request):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
         
-        # 上傳到 MinIO
+        # 【步驟 9】上傳 AI 處理後的圖片到 MinIO
+        logger.info("💾 開始上傳 AI 處理後的圖片到 MinIO...")
+        
         try:
-            file_data = io.BytesIO(file_bytes)
-            file_length = len(file_bytes)
+            file_data = io.BytesIO(processed_image)
+            file_length = len(processed_image)
             
             minio_client.put_object(
                 settings.MINIO_BUCKET_NAME,
                 unique_filename,
                 file_data,
                 file_length,
-                content_type=format_info['content_type']
+                content_type=final_content_type
             )
             
-            logger.info(f"✅ 成功上傳到 MinIO：{settings.MINIO_BUCKET_NAME}/{unique_filename}")
+            logger.info(f"✅ 成功上傳 AI 處理後的圖片到 MinIO：{settings.MINIO_BUCKET_NAME}/{unique_filename}")
             
         except S3Error as e:
             logger.error(f"❌ 上傳到 MinIO 失敗：{e}")
@@ -1364,7 +1541,7 @@ def user_photo(request):
                     'success': False,
                     'message': '圖片儲存失敗（MinIO 上傳出錯）'
                 },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
         except Exception as e:
             logger.error(f"❌ 上傳過程發生錯誤：{e}")
@@ -1376,7 +1553,7 @@ def user_photo(request):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
-        # 【步驟 6】產生公開 URL
+        # 【步驟 10】產生公開 URL
         try:
             public_url = f"{settings.MINIO_EXTERNAL_URL}/{settings.MINIO_BUCKET_NAME}/{unique_filename}"
             logger.info(f"✅ 公開 URL：{public_url[:100]}...")
@@ -1384,7 +1561,7 @@ def user_photo(request):
             logger.error(f"❌ 產生 URL 失敗：{e}")
             public_url = None
         
-        # 【步驟 7】更新 User 表中的 user_image_url 欄位
+        # 【步驟 11】更新 User 表中的 user_image_url 欄位
         try:
             user.user_image_url = public_url
             user.save()
@@ -1400,18 +1577,30 @@ def user_photo(request):
             )
         
         logger.info("=" * 50)
-        logger.info("✅ 用戶模型照片上傳成功")
+        logger.info("✅ 用戶模型照片上傳成功（經 AI 去背處理）")
         logger.info("=" * 50)
         
-        # 【步驟 8】返回成功響應
+        # 【步驟 12】返回成功響應
         return Response(
             {
                 'success': True,
-                'message': '模型照片已上傳',
-                'data': {
+                'message': '模型照片已上傳（已進行 AI 去背處理）',
+                'photo_data': {
+                    'photo_url': public_url,
+                    'uploaded_at': user.updated_at.isoformat() if hasattr(user, 'updated_at') else None,
+                    'note': '此照片已經過 AI 去背處理，已保存為虛擬試穿用的模特照片'
+                },
+                'user': {
                     'user_uid': user_uid,
+                    'user_name': user.user_name,
                     'user_image_url': public_url,
-                    'upload_time': user.updated_at.isoformat() if hasattr(user, 'updated_at') else None
+                    'updated_at': user.updated_at.isoformat() if hasattr(user, 'updated_at') else None
+                },
+                'ai_status': {
+                    'status_code': json_data.get('code', 200),
+                    'message': json_data.get('message', 'Processing Success'),
+                    'file_name': ai_file_name,
+                    'file_format': ai_file_format
                 }
             },
             status=status.HTTP_201_CREATED
@@ -1452,6 +1641,377 @@ def user_photo(request):
                     'user_uid': user_uid,
                     'user_image_url': user.user_image_url,
                     'upload_time': user.updated_at.isoformat() if hasattr(user, 'updated_at') else None
+                }
+            },
+            status=status.HTTP_200_OK
+        )
+    
+    # ==========================================
+    # 【PUT 請求：更新用戶模型照片】
+    # ==========================================
+    elif request.method == 'PUT':
+        logger.info("=" * 50)
+        logger.info("🔄 收到用戶模型照片更新請求")
+        
+        # 取得當前用戶
+        user = request.user
+        user_uid = str(user.user_uid)
+        logger.info(f"👤 用戶 UID: {user_uid}")
+        
+        # 【步驟 0】保存舊照片 URL（稍後用於刪除）
+        old_photo_url = user.user_image_url
+        old_filename = None
+        if old_photo_url:
+            # 從 URL 中提取檔案名稱
+            # URL 格式：http://minio.example.com/bucket-name/user-photos/user_photo_xxx.jpg
+            try:
+                # 提取路徑部分（從 bucket 後開始）
+                parts = old_photo_url.split(f"/{settings.MINIO_BUCKET_NAME}/")
+                if len(parts) > 1:
+                    old_filename = parts[1]  # 例如：user-photos/user_photo_xxx.jpg
+                    logger.info(f"📝 舊照片檔案名稱：{old_filename}")
+            except Exception as e:
+                logger.warning(f"⚠️  無法提取舊照片檔案名稱：{e}")
+        
+        # 【步驟 1】檢查請求是否包含 photo_file 欄位
+        if 'photo_file' not in request.FILES:
+            logger.error("❌ 請求中未找到 'photo_file' 欄位")
+            return Response(
+                {
+                    'success': False,
+                    'message': '請上傳圖片檔案（欄位名稱：photo_file）'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        photo_file = request.FILES['photo_file']
+        logger.info(f"📷 接收到圖片")
+        logger.info(f"   檔案大小：{photo_file.size} bytes")
+        logger.info(f"   內容類型：{photo_file.content_type}")
+        
+        # 【步驟 2】驗證檔案格式
+        allowed_formats = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+        if photo_file.content_type not in allowed_formats:
+            logger.error(f"❌ 不支援的檔案格式：{photo_file.content_type}")
+            return Response(
+                {
+                    'success': False,
+                    'message': '不支援的檔案格式。允許的格式：JPG, PNG, GIF, WebP'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        logger.info(f"✅ 檔案格式驗證通過：{photo_file.content_type}")
+        
+        # 【步驟 3】驗證檔案大小（最大 10MB）
+        max_size = 10 * 1024 * 1024  # 10MB
+        if photo_file.size > max_size:
+            logger.error(f"❌ 檔案大小超過限制：{photo_file.size} > {max_size}")
+            return Response(
+                {
+                    'success': False,
+                    'message': f'檔案大小不能超過 10MB（當前大小：{photo_file.size // 1024}KB）'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        logger.info(f"✅ 檔案大小驗證通過：{photo_file.size} bytes")
+        
+        # 【步驟 4】讀取檔案內容
+        try:
+            photo_file.seek(0)
+            file_bytes = photo_file.read()
+            logger.info(f"✅ 圖片讀取成功，大小：{len(file_bytes)} bytes")
+        except Exception as e:
+            logger.error(f"❌ 讀取圖片失敗：{e}")
+            return Response(
+                {
+                    'success': False,
+                    'message': f'讀取圖片失敗：{str(e)}'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        # 【步驟 5】轉發給 AI 後端進行去背處理（模特照片）
+        logger.info("🤖 準備轉發給 AI 後端進行去背處理...")
+        
+        # 重新建立文件對象供 AI 後端使用
+        photo_file.seek(0)
+        
+        # 決定副檔名和 content_type
+        format_mapping = {
+            'image/jpeg': {'ext': '.jpg', 'content_type': 'image/jpeg'},
+            'image/png':  {'ext': '.png', 'content_type': 'image/png'},
+            'image/gif':  {'ext': '.gif', 'content_type': 'image/gif'},
+            'image/webp': {'ext': '.webp', 'content_type': 'image/webp'},
+        }
+        format_info = format_mapping.get(
+            photo_file.content_type,
+            {'ext': '.jpg', 'content_type': 'image/jpeg'}
+        )
+        
+        # 準備發送給 AI 後端的文件
+        files = {
+            'model_image': (f'model_image{format_info["ext"]}', io.BytesIO(file_bytes), photo_file.content_type)
+        }
+        
+        # 發送 POST 請求給 AI 後端（模特照片去背處理）
+        ai_fitting_url = f"{settings.AI_BACKEND_URL}/virtual_try_on/fitting/modules"
+        logger.info(f"🔗 AI 端點 URL：{ai_fitting_url}")
+        
+        try:
+            ai_response = requests.post(
+                ai_fitting_url,
+                files=files,
+                timeout=120
+            )
+        except requests.exceptions.Timeout:
+            logger.error("❌ AI 後端請求超時")
+            return Response(
+                {
+                    'success': False,
+                    'message': 'AI 後端處理超時'
+                },
+                status=status.HTTP_504_GATEWAY_TIMEOUT
+            )
+        except requests.exceptions.ConnectionError:
+            logger.error("❌ 無法連接到 AI 後端")
+            return Response(
+                {
+                    'success': False,
+                    'message': 'AI 後端服務不可用'
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        except Exception as e:
+            logger.error(f"❌ 轉發給 AI 後端失敗：{e}")
+            return Response(
+                {
+                    'success': False,
+                    'message': f'轉發給 AI 後端失敗：{str(e)}'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        ai_status_code = ai_response.status_code
+        logger.info(f"✅ AI 後端響應狀態碼：{ai_status_code}")
+        
+        # 【步驟 6】檢查 AI 後端響應
+        if ai_status_code != 200:
+            logger.error(f"❌ AI 後端處理失敗（狀態碼：{ai_status_code}）")
+            try:
+                error_detail = ai_response.json()
+                logger.error(f"   錯誤詳情：{error_detail}")
+            except Exception:
+                error_detail = ai_response.text[:200]
+                logger.error(f"   原始響應：{error_detail}")
+            
+            return Response(
+                {
+                    'success': False,
+                    'message': 'AI 去背處理失敗',
+                    'ai_status': {
+                        'status_code': ai_status_code,
+                        'message': f'AI 後端返回狀態碼 {ai_status_code}'
+                    }
+                },
+                status=ai_status_code if ai_status_code >= 400 and ai_status_code < 600 else 500
+            )
+        
+        # 【步驟 7】解析 AI 返回的 multipart 回應
+        logger.info("🔍 開始解析 AI 返回的 multipart 回應...")
+        
+        content_type = ai_response.headers.get('Content-Type', '')
+        logger.info(f"   AI 響應的 Content-Type: {content_type}")
+        
+        json_data = None
+        processed_image = None
+        
+        if 'multipart' in content_type:
+            multipart_data = multipart_decoder.MultipartDecoder(
+                ai_response.content, content_type
+            )
+            
+            for part in multipart_data.parts:
+                part_content_type = ''
+                for header_name, header_value in part.headers.items():
+                    h_name = header_name.decode() if isinstance(header_name, bytes) else header_name
+                    h_value = header_value.decode() if isinstance(header_value, bytes) else header_value
+                    if h_name.lower() == 'content-type':
+                        part_content_type = h_value
+                
+                if 'application/json' in part_content_type:
+                    json_data = json.loads(part.content.decode('utf-8'))
+                    logger.info("✅ 解析到 JSON 元數據")
+                elif 'image' in part_content_type:
+                    processed_image = part.content
+                    logger.info(f"✅ 解析到處理後圖片，大小：{len(processed_image)} bytes")
+        else:
+            logger.warning("⚠️ AI 回應非 multipart 格式，嘗試向後兼容解析")
+            try:
+                json_data = ai_response.json()
+            except Exception:
+                processed_image = ai_response.content
+        
+        if not json_data:
+            logger.error("❌ AI 返回的資料缺少 JSON 元數據")
+            return Response(
+                {
+                    'success': False,
+                    'message': 'AI 返回的資料格式錯誤：缺少 JSON 元數據'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        if not processed_image or len(processed_image) == 0:
+            logger.error("❌ AI 返回的圖片資料為空")
+            return Response(
+                {
+                    'success': False,
+                    'message': 'AI 返回的圖片資料為空'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        logger.info(f"✅ 成功解析 AI 回應：JSON 元數據 + 圖片二進制數據")
+        
+        # 【步驟 8】提取 AI 回傳的文件名和格式
+        ai_file_name = json_data.get('data', {}).get('file_name', f'model_photo_{user_uid}.png')
+        ai_file_format = json_data.get('data', {}).get('file_format', 'PNG')
+        logger.info(f"   AI 返回的文件名：{ai_file_name}")
+        logger.info(f"   AI 返回的文件格式：{ai_file_format}")
+        
+        # 決定最終的副檔名
+        if ai_file_format.upper() == 'PNG':
+            final_ext = '.png'
+            final_content_type = 'image/png'
+        elif ai_file_format.upper() in ['JPG', 'JPEG']:
+            final_ext = '.jpg'
+            final_content_type = 'image/jpeg'
+        elif ai_file_format.upper() == 'GIF':
+            final_ext = '.gif'
+            final_content_type = 'image/gif'
+        elif ai_file_format.upper() == 'WEBP':
+            final_ext = '.webp'
+            final_content_type = 'image/webp'
+        else:
+            final_ext = '.png'
+            final_content_type = 'image/png'
+        
+        # 產生唯一檔案名稱：user_uid + 時間戳 + 隨機ID
+        unique_id = uuid.uuid4().hex[:8]
+        unique_filename = f"user-photos/model_photo_{user_uid}_{unique_id}{final_ext}"
+        logger.info(f"   新照片檔案名稱（含資料夾）：{unique_filename}")
+        
+        # 取得 MinIO 客戶端
+        minio_client = get_minio_client()
+        if minio_client is None:
+            logger.error("❌ MinIO 客戶端不可用")
+            return Response(
+                {
+                    'success': False,
+                    'message': '儲存服務不可用'
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        
+        # 【步驟 9】上傳 AI 處理後的圖片到 MinIO
+        logger.info("💾 開始上傳 AI 處理後的圖片到 MinIO...")
+        
+        try:
+            file_data = io.BytesIO(processed_image)
+            file_length = len(processed_image)
+            
+            minio_client.put_object(
+                settings.MINIO_BUCKET_NAME,
+                unique_filename,
+                file_data,
+                file_length,
+                content_type=final_content_type
+            )
+            
+            logger.info(f"✅ 成功上傳 AI 處理後的圖片到 MinIO：{settings.MINIO_BUCKET_NAME}/{unique_filename}")
+            
+        except S3Error as e:
+            logger.error(f"❌ 上傳到 MinIO 失敗：{e}")
+            return Response(
+                {
+                    'success': False,
+                    'message': '圖片儲存失敗（MinIO 上傳出錯）'
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        except Exception as e:
+            logger.error(f"❌ 上傳過程發生錯誤：{e}")
+            return Response(
+                {
+                    'success': False,
+                    'message': f'圖片儲存失敗：{str(e)}'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        # 【步驟 10】產生公開 URL
+        try:
+            public_url = f"{settings.MINIO_EXTERNAL_URL}/{settings.MINIO_BUCKET_NAME}/{unique_filename}"
+            logger.info(f"✅ 新照片 URL：{public_url[:100]}...")
+        except Exception as e:
+            logger.error(f"❌ 產生 URL 失敗：{e}")
+            public_url = None
+        
+        # 【步驟 7】更新 User 表中的 user_image_url 欄位（覆蓋舊照片）
+        try:
+            user.user_image_url = public_url
+            user.save()
+            logger.info(f"✅ 已更新用戶的 user_image_url（覆蓋舊照片）")
+        except Exception as e:
+            logger.error(f"❌ 更新用戶資訊失敗：{e}")
+            return Response(
+                {
+                    'success': False,
+                    'message': f'更新用戶資訊失敗：{str(e)}'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        # 【步驟 8】刪除 MinIO 中的舊照片（可選，但推薦）
+        if old_filename:
+            logger.info(f"🗑️  開始刪除舊照片：{old_filename}")
+            try:
+                minio_client.remove_object(
+                    settings.MINIO_BUCKET_NAME,
+                    old_filename
+                )
+                logger.info(f"✅ 成功刪除舊照片：{old_filename}")
+            except S3Error as e:
+                # 如果舊照片不存在或刪除失敗，只記錄警告，不影響更新成功
+                logger.warning(f"⚠️  刪除舊照片失敗（可能已刪除）：{e}")
+            except Exception as e:
+                logger.warning(f"⚠️  刪除舊照片過程出錯：{e}")
+        
+        logger.info("=" * 50)
+        logger.info("✅ 用戶模型照片更新成功（經 AI 去背處理，舊照片已刪除）")
+        logger.info("=" * 50)
+        
+        # 【步驟 13】返回成功響應
+        return Response(
+            {
+                'success': True,
+                'message': '模型照片已更新（已進行 AI 去背處理，舊照片已刪除）',
+                'photo_data': {
+                    'photo_url': public_url,
+                    'uploaded_at': user.updated_at.isoformat() if hasattr(user, 'updated_at') else None,
+                    'note': '此照片已經過 AI 去背處理，已保存為虛擬試穿用的模特照片'
+                },
+                'user': {
+                    'user_uid': user_uid,
+                    'user_name': user.user_name,
+                    'user_image_url': public_url,
+                    'updated_at': user.updated_at.isoformat() if hasattr(user, 'updated_at') else None
+                },
+                'ai_status': {
+                    'status_code': json_data.get('code', 200),
+                    'message': json_data.get('message', 'Processing Success'),
+                    'file_name': ai_file_name,
+                    'file_format': ai_file_format
                 }
             },
             status=status.HTTP_200_OK
