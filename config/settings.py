@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'picture',                       # 圖片處理應用
     'accounts',                      # 用戶認證應用
     'combine',                       # 穿搭與虛擬試穿應用
+    'aichat_service',                # AI 聊天和推薦服務應用
 ]
 
 # 中間件設定

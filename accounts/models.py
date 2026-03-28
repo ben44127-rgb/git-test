@@ -116,6 +116,8 @@ class Clothes(models.Model):
     clothes_image_url = models.CharField(max_length=500, db_column='clothes_image_url', help_text='去背後的衣伺圖片URL')
     clothes_original_image_url = models.CharField(max_length=500, db_column='clothes_original_image_url', default='', blank=True, help_text='原始衣伺圖片URL')
     clothes_favorite = models.BooleanField(default=False, db_column='clothes_favorite')
+    colors = models.JSONField(default=list, blank=True, help_text='衣伺顏色列表')
+    styles = models.JSONField(default=list, blank=True, help_text='衣伺風格列表')
     clothes_created_time = models.DateTimeField(auto_now_add=True, db_column='clothes_created_time')
     clothes_updated_time = models.DateTimeField(auto_now=True, db_column='clothes_updated_time')
     

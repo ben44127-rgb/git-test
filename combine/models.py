@@ -23,6 +23,11 @@ class Model(models.Model):
     - 相關的虛擬試衣記錄參考
     """
     
+    SOURCE_CHOICES = [
+        ('manual', '手動穿搭'),
+        ('ai_recommendation', 'AI 推薦穿搭'),
+    ]
+    
     # 主鍵和唯一標識
     model_id = models.AutoField(primary_key=True, db_column='model_id')
     f_user_uid = models.CharField(
@@ -76,11 +81,47 @@ class Model(models.Model):
         help_text='AI 後端返回的完整 JSON 數據'
     )
     
+    # AI 推薦相關字段
+    source = models.CharField(
+        max_length=50,
+        choices=SOURCE_CHOICES,
+        default='manual',
+        verbose_name='來源',
+        help_text='此試穿的來源是手動還是 AI 推薦'
+    )
+    recommendation_score = models.FloatField(
+        default=0.5,
+        verbose_name='推薦分數',
+        help_text='AI 推薦的置信度分數（0.0-1.0）'
+    )
+    recommendation_context = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='推薦背景',
+        help_text='用戶的原始推薦請求'
+    )
+    recommendation_keywords = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name='推薦關鍵詞',
+        help_text='AI 提取的推薦關鍵詞'
+    )
+    ai_analysis = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='AI 分析',
+        help_text='AI 對此穿搭的分析說明'
+    )
+    
     # 時間戳
     model_created_time = models.DateTimeField(
         auto_now_add=True,
         db_column='model_created_time',
         verbose_name='建立時間'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='創建時間'
     )
     model_updated_time = models.DateTimeField(
         auto_now=True,
@@ -97,6 +138,8 @@ class Model(models.Model):
             models.Index(fields=['model_uid']),
             models.Index(fields=['f_user_uid']),
             models.Index(fields=['model_created_time']),
+            models.Index(fields=['source']),
+            models.Index(fields=['f_user_uid', 'created_at']),
         ]
     
     def __str__(self):

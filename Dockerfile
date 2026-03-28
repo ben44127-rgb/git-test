@@ -36,6 +36,7 @@ COPY config/ config/
 COPY accounts/ accounts/
 COPY picture/ picture/
 COPY combine/ combine/
+COPY aichat_service/ aichat_service/
 
 # 複製環境變數檔案（如果存在）
 COPY .env* ./
