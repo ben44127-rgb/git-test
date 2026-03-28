@@ -1,674 +1,417 @@
 """
-Views for Outfit/Combine Management API
-穿搭組合和虛擬試衣管理的視圖
+Views for Virtual Try-On API
+虛擬試衣管理的視圖
 
 主要功能：
-1. OUTFIT-001：查看穿搭列表
-2. OUTFIT-002：新增穿搭組合
-3. OUTFIT-003：虛擬試衣和保存穿搭
-4. OUTFIT-004：穿搭互動（喜歡、評分）
-5. CRUD 操作：編輯、刪除穿搭
+1. Feature 3.1：發起虛擬試衣
+2. 查看我的試穿歷史
+3. 查看試穿詳情
 """
 
 import json
+import re
+import logging
 import requests
+from io import BytesIO
 from django.conf import settings
-from django.db.models import Q, Avg, Count
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from minio import Minio
+from minio.error import S3Error
 
-from .models import (
-    Outfit,
-    OutfitClothes,
-    VirtualTryOn,
-    OutfitFavorite,
-)
-from .serializers import (
-    OutfitSerializer,
-    OutfitDetailSerializer,
-    OutfitCreateSerializer,
-    VirtualTryOnSerializer,
-    VirtualTryOnCreateSerializer,
-    OutfitFavoriteSerializer,
-)
-from accounts.models import Clothes, Photo
-from picture.models import Photo
+from .models import Model
+from .serializers import VirtualTryOnCreateSerializer, ModelSerializer
+from accounts.models import Clothes, User
+
+logger = logging.getLogger(__name__)
 
 
-# ============================================================================
-# OUTFIT-001: 查看穿搭列表
-# ============================================================================
+def _extract_filename(content_disposition, default_name='try_on_outfit.png'):
+    """從 Content-Disposition 取出檔名。"""
+    if not content_disposition:
+        return default_name
+    match = re.search(r'filename="?([^";]+)"?', content_disposition)
+    if match:
+        return match.group(1)
+    return default_name
 
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def outfit_list(request):
+
+def _parse_multipart_mixed_response(ai_response):
     """
-    功能編號：OUTFIT-001
-    模組：combine
-    説明：顯示系統中所有穿搭組合，支持分頁
-    
-    查詢參數：
-    - page: 頁碼（默認 1）
-    - limit: 每頁數量（默認 20）
+    解析 AI 回傳的 multipart/mixed 響應。
+    返回：json_data, image_bytes, image_filename
     """
-    
-    try:
-        # 基礎 QuerySet
-        queryset = Outfit.objects.filter(is_draft=False).select_related('created_by')
-        
-        # 分頁
-        page = int(request.query_params.get('page', 1))
-        limit = int(request.query_params.get('limit', 20))
-        start_idx = (page - 1) * limit
-        end_idx = start_idx + limit
-        
-        total_count = queryset.count()
-        total_pages = (total_count + limit - 1) // limit
-        
-        paginated_queryset = queryset[start_idx:end_idx]
-        
-        # 序列化
-        serializer = OutfitSerializer(
-            paginated_queryset,
-            many=True,
-            context={'request': request}
-        )
-        
-        return Response({
-            'success': True,
-            'message': '穿搭列表獲取成功',
-            'count': total_count,
-            'total_pages': total_pages,
-            'current_page': page,
-            'limit': limit,
-            'results': serializer.data,
-        })
-    
-    except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'獲取穿搭列表失敗：{str(e)}',
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    content_type = ai_response.headers.get('Content-Type', '')
+    match = re.search(r'boundary="?([^";]+)"?', content_type)
+    if not match:
+        raise ValueError('AI 回應缺少 multipart boundary')
+
+    boundary = match.group(1).encode('utf-8')
+    delimiter = b'--' + boundary
+    parts = ai_response.content.split(delimiter)
+
+    json_data = None
+    image_bytes = None
+    image_filename = 'try_on_outfit.png'
+
+    for raw_part in parts:
+        part = raw_part.strip()
+        if not part or part == b'--':
+            continue
+        if part.endswith(b'--'):
+            part = part[:-2].strip()
+
+        if b'\r\n\r\n' in part:
+            headers_blob, body_blob = part.split(b'\r\n\r\n', 1)
+        elif b'\n\n' in part:
+            headers_blob, body_blob = part.split(b'\n\n', 1)
+        else:
+            continue
+
+        headers_text = headers_blob.decode('utf-8', errors='ignore')
+        headers_lower = headers_text.lower()
+        body = body_blob.strip(b'\r\n')
+
+        if 'application/json' in headers_lower:
+            json_data = json.loads(body.decode('utf-8', errors='ignore'))
+        elif 'image/png' in headers_lower or 'application/octet-stream' in headers_lower:
+            image_bytes = body
+            content_disposition = ''
+            for line in headers_text.splitlines():
+                if line.lower().startswith('content-disposition:'):
+                    content_disposition = line
+                    break
+            image_filename = _extract_filename(content_disposition, image_filename)
+
+    if json_data is None:
+        raise ValueError('AI multipart 回應缺少 JSON metadata')
+
+    return json_data, image_bytes, image_filename
 
 
 # ============================================================================
-# OUTFIT-002: 新增穿搭組合
-# ============================================================================
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def outfit_create(request):
-    """
-    功能編號：OUTFIT-002
-    模組：combine
-    説明：用戶建立新的穿搭組合
-    
-    請求參數（JSON）：
-    {
-        "outfit_name": "我的春日穿搭",
-        "outfit_description": "舒適又時尚的春季搭配",
-        "season": "春季",
-        "style": "休閒",
-        "clothes_ids": ["uuid1", "uuid2", "uuid3"],
-        "preview_image_url": "https://..." (可選),
-        "is_draft": false
-    }
-    """
-    
-    try:
-        serializer = OutfitCreateSerializer(
-            data=request.data,
-            context={'request': request}
-        )
-        
-        if not serializer.is_valid():
-            return Response({
-                'success': False,
-                'message': '穿搭數據驗證失敗',
-                'errors': serializer.errors,
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # 創建穿搭，自動設定創建者為當前用戶
-        outfit = serializer.save(created_by=request.user)
-        
-        # 返回完整穿搭詳情
-        output_serializer = OutfitDetailSerializer(
-            outfit,
-            context={'request': request}
-        )
-        
-        return Response({
-            'success': True,
-            'message': '穿搭建立成功',
-            'data': output_serializer.data,
-        }, status=status.HTTP_201_CREATED)
-    
-    except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'穿搭建立失敗：{str(e)}',
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-# ============================================================================
-# 查看穿搭詳情
-# ============================================================================
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def outfit_detail(request, outfit_uid):
-    """
-    查看單個穿搭的詳細信息
-    
-    路徑參數：
-    - outfit_uid: 穿搭 UUID
-    """
-    
-    try:
-        outfit = Outfit.objects.select_related('created_by').prefetch_related(
-            'outfit_clothes__clothes',
-            'liked_by',
-            'ratings'
-        ).get(outfit_uid=outfit_uid)
-        
-        serializer = OutfitDetailSerializer(
-            outfit,
-            context={'request': request}
-        )
-        
-        return Response({
-            'success': True,
-            'message': '穿搭詳情獲取成功',
-            'data': serializer.data,
-        })
-    
-    except Outfit.DoesNotExist:
-        return Response({
-            'success': False,
-            'message': '穿搭不存在',
-        }, status=status.HTTP_404_NOT_FOUND)
-    
-    except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'獲取穿搭詳情失敗：{str(e)}',
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-# ============================================================================
-# 更新穿搭
-# ============================================================================
-
-@api_view(['PUT'])
-@permission_classes([IsAuthenticated])
-def outfit_update(request, outfit_uid):
-    """
-    更新穿搭信息
-    
-    只有穿搭擁有者或管理員可以更新
-    """
-    
-    try:
-        outfit = Outfit.objects.get(outfit_uid=outfit_uid)
-        
-        # 權限檢查
-        if outfit.created_by != request.user and not request.user.is_staff:
-            return Response({
-                'success': False,
-                'message': '沒有權限修改此穿搭',
-            }, status=status.HTTP_403_FORBIDDEN)
-        
-        serializer = OutfitCreateSerializer(
-            outfit,
-            data=request.data,
-            partial=True,
-            context={'request': request}
-        )
-        
-        if not serializer.is_valid():
-            return Response({
-                'success': False,
-                'message': '穿搭數據驗證失敗',
-                'errors': serializer.errors,
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        outfit = serializer.save()
-        
-        output_serializer = OutfitDetailSerializer(
-            outfit,
-            context={'request': request}
-        )
-        
-        return Response({
-            'success': True,
-            'message': '穿搭更新成功',
-            'data': output_serializer.data,
-        })
-    
-    except Outfit.DoesNotExist:
-        return Response({
-            'success': False,
-            'message': '穿搭不存在',
-        }, status=status.HTTP_404_NOT_FOUND)
-    
-    except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'穿搭更新失敗：{str(e)}',
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-# ============================================================================
-# 刪除穿搭
-# ============================================================================
-
-@api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
-def outfit_delete(request, outfit_uid):
-    """
-    刪除穿搭
-    
-    只有穿搭擁有者或管理員可以刪除
-    """
-    
-    try:
-        outfit = Outfit.objects.get(outfit_uid=outfit_uid)
-        
-        # 權限檢查
-        if outfit.created_by != request.user and not request.user.is_staff:
-            return Response({
-                'success': False,
-                'message': '沒有權限刪除此穿搭',
-            }, status=status.HTTP_403_FORBIDDEN)
-        
-        outfit_name = outfit.outfit_name
-        outfit.delete()
-        
-        return Response({
-            'success': True,
-            'message': f'穿搭「{outfit_name}」已刪除',
-        })
-    
-    except Outfit.DoesNotExist:
-        return Response({
-            'success': False,
-            'message': '穿搭不存在',
-        }, status=status.HTTP_404_NOT_FOUND)
-    
-    except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'穿搭刪除失敗：{str(e)}',
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-# ============================================================================
-# OUTFIT-003: 虛擬試衣核心流程
+# Feature 3.1: 虛擬試衣核心功能
 # ============================================================================
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def virtual_try_on(request):
     """
-    功能編號：OUTFIT-003-01
+    功能編號：Feature 3.1 - 虛擬試衣
+    
     流程説明：
-    1️⃣ 前端用戶選擇穿搭或衣服組合
-    2️⃣ 發送請求至後端（包含穿搭 UID 或衣服 UUID 列表）
+    1️⃣ 前端用戶選擇衣服組合（必須恰好 2 件）
+    2️⃣ 發送請求至後端
     3️⃣ 後端驗證用戶身體數據和衣服數據
     4️⃣ 後端準備 AI 請求參數
     5️⃣ 轉發至 AI 後端進行虛擬試衣合成
-    6️⃣ 返回試衣結果圖片給前端
+    6️⃣ AI 返回試衣結果圖片
+    7️⃣ 直接保存結果到 Model 表
+    8️⃣ 返回試穿結果給前端
+    
+    請求參數（JSON）：
+    {
+        "clothes_ids": ["uuid1", "uuid2"]
+    }
+    
+    返回示例：
+    {
+        "success": true,
+        "message": "虛擬試穿完成",
+        "model_data": {
+            "model_uid": "xxx",
+            "f_user_uid": "xxx",
+            "status": "completed",
+            "model_picture": "http://minio:9000/...",
+            "model_style": ["Japanese Style", "Elegant"],
+            "clothes_count": 2,
+            "ai_response": {...}
+        }
+    }
     """
     
     try:
-        # 驗證請求參數
-        serializer = VirtualTryOnCreateSerializer(data=request.data)
+        serializer = VirtualTryOnCreateSerializer(
+            data=request.data,
+            context={'request': request}
+        )
         if not serializer.is_valid():
             return Response({
                 'success': False,
                 'message': '請求參數驗證失敗',
                 'errors': serializer.errors,
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         validated_data = serializer.validated_data
-        
-        # 創建虛擬試衣記錄（初始狀態：pending）
-        try_on = VirtualTryOn.objects.create(
-            user=request.user,
-            outfit_id=validated_data.get('outfit_uid'),
-            clothes_list=validated_data.get('clothes_ids'),
-            status='processing',
-        )
-        
-        # 獲取用戶身體數據
-        user_height = request.user.user_height or 170
-        user_weight = request.user.user_weight or 65
-        user_shoulder_width = request.user.user_shoulder_width or 40
-        user_arm_length = request.user.user_arm_length or 60
-        user_waistline = request.user.user_waistline or 75
-        user_leg_length = request.user.user_leg_length or 95
-        
-        # 獲取用戶照片（模特照片）
-        photo_uid = validated_data.get('photo_uid')
-        user_photo = None
-        model_image_file = None
-        
-        if photo_uid:
-            try:
-                user_photo = Photo.objects.get(photo_uid=photo_uid)
-                try_on.user_photo = user_photo
-                try_on.save()
-                
-                # 讀取模特照片文件
-                model_image_url = user_photo.photo_url
-                response = requests.get(model_image_url)
-                model_image_file = ('model_image.png', response.content, 'image/png')
-            except Photo.DoesNotExist:
-                pass
-        
-        # 如果沒有提供照片，則使用用戶身體測量數據
-        if not user_photo and not model_image_file:
-            # 尋找任何用戶照片作為模特照片
-            user_photos = Photo.objects.filter(f_user_uid=request.user).first()
-            if user_photos:
-                model_image_url = user_photos.photo_url
-                response = requests.get(model_image_url)
-                model_image_file = ('model_image.png', response.content, 'image/png')
-        
-        # 獲取衣服數據和圖片
-        clothes_ids = validated_data.get('clothes_ids')
-        clothes_list = Clothes.objects.filter(clothes_uid__in=clothes_ids)
-        
-        if len(clothes_list) == 0:
-            try_on.status = 'error'
-            try_on.ai_error_message = '未找到指定的衣服'
-            try_on.save()
-            
-            return Response({
-                'success': False,
-                'message': '未找到指定的衣服',
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # 準備發送給 AI 後端的數據
+        clothes_ids = [str(uid) for uid in validated_data.get('clothes_ids', [])]
+
+        # 用戶身體測量資訊（若未填則給預設值）
         model_info = {
-            'user_height': float(user_height),
-            'user_weight': int(user_weight),
-            'user_shoulder_width': float(user_shoulder_width),
-            'user_arm_length': float(user_arm_length),
-            'user_waistline': float(user_waistline),
-            'user_leg_length': float(user_leg_length),
+            'user_height': float(request.user.user_height or 170),
+            'user_weight': int(request.user.user_weight or 65),
+            'user_shoulder_width': float(request.user.user_shoulder_width or 40),
+            'user_arm_length': float(request.user.user_arm_length or 60),
+            'user_waistline': float(request.user.user_waistline or 75),
+            'user_leg_length': float(request.user.user_leg_length or 95),
         }
-        
-        garments = []
-        garment_files = {}
-        
-        for idx, clothes in enumerate(clothes_list):
-            garments.append({
-                'clothes_category': clothes.clothes_category,
-                'garment_info': {
-                    'clothes_arm_length': float(clothes.clothes_arm_length or 0),
-                    'clothes_shoulder_width': float(clothes.clothes_shoulder_width or 0),
-                    'clothes_waistline': float(clothes.clothes_waistline or 0),
-                    'clothes_leg_length': float(clothes.clothes_leg_length or 0),
-                }
-            })
-            
-            # 下載衣服圖片
-            if clothes.clothes_image_url:
-                try:
-                    img_response = requests.get(clothes.clothes_image_url)
-                    garment_files[f'garment_images'] = (
-                        f'garment_{idx}.png',
-                        img_response.content,
-                        'image/png'
-                    )
-                except Exception as e:
-                    try_on.ai_error_message = f'無法下載衣服圖片：{str(e)}'
-        
-        # 準備 AI 後端的請求
-        ai_url = getattr(settings, 'AI_BACKEND_VIRTUAL_TRY_ON_URL', 
-                        'http://192.168.233.128:8002/virtual_try_on/clothes/combine')
-        
-        files = {}
-        if model_image_file:
-            files['model_image'] = model_image_file
-        
-        # 合併所有圖片檔案
-        files.update(garment_files)
-        
-        data = {
-            'model_info': json.dumps(model_info),
-            'garments': json.dumps(garments),
-        }
-        
-        # 調用 AI 後端
-        try:
-            ai_response = requests.post(
-                ai_url,
-                files=files,
-                data=data,
-                timeout=120
-            )
-            
-            # 處理 AI 響應
-            if ai_response.status_code == 200:
-                # AI 返回 multipart/mixed 響應
-                # 需要解析其中的 JSON 和圖片
-                
-                # 簡化處理：假設 AI 返回 JSON 和圖片
-                try:
-                    # 嘗試直接作為 JSON 解析
-                    response_data = ai_response.json()
-                except:
-                    # 如果是 multipart，需要手動解析
-                    response_data = {
-                        'code': 200,
-                        'message': '200',
-                        'data': {
-                            'file_name': 'try_on_outfit.png',
-                            'file_format': 'PNG',
-                            'items_processed': len(clothes_list),
-                        }
-                    }
-                
-                # 保存結果圖片到 MinIO
-                if ai_response.status_code == 200:
-                    # 從 AI 響應中提取圖片
-                    # 這裡假設圖片是返回的二進位數據
-                    
-                    # 生成結果 URL（實際應使用 MinIO 永久存儲）
-                    result_image_url = f"{getattr(settings, 'MINIO_EXTERNAL_URL', 'http://192.168.233.128:9000')}/virtual-try-on/try_on_{try_on.try_on_uid}.png"
-                    
-                    # 更新虛擬試衣記錄
-                    try_on.status = 'completed'
-                    try_on.result_image_url = result_image_url
-                    try_on.result_file_name = response_data.get('data', {}).get('file_name', 'try_on_outfit.png')
-                    try_on.ai_response_data = response_data
-                    try_on.ai_processed_at = timezone.now()
-                    try_on.save()
-                    
-                    # 返回虛擬試衣結果給前端
-                    return Response({
-                        'success': True,
-                        'message': '虛擬試衣完成，請確認是否保存',
-                        'try_on_data': {
-                            'try_on_uid': str(try_on.try_on_uid),
-                            'status': try_on.status,
-                            'result_image_url': result_image_url,
-                            'clothes_count': len(clothes_list),
-                            'ai_response': response_data,
-                        }
-                    })
-            else:
-                raise Exception(f'AI 後端返回錯誤：{ai_response.status_code}')
-        
-        except requests.exceptions.Timeout:
-            try_on.status = 'error'
-            try_on.ai_error_message = '虛擬試衣超時（超過 120 秒）'
-            try_on.save()
-            
+
+        # 依照輸入順序載入衣服資料
+        clothes_qs = Clothes.objects.filter(
+            clothes_uid__in=clothes_ids,
+            f_user_uid=str(request.user.user_uid)
+        )
+        clothes_map = {str(item.clothes_uid): item for item in clothes_qs}
+        ordered_clothes = [clothes_map.get(cid) for cid in clothes_ids]
+
+        if any(item is None for item in ordered_clothes):
             return Response({
                 'success': False,
-                'message': '虛擬試衣超時，請稍後重試',
+                'message': '衣服不存在或不屬於當前使用者',
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # 獲取用戶模特照片（直接從 User.user_image_url）
+        if not request.user.user_image_url:
+            return Response({
+                'success': False,
+                'message': '用戶未設定模特照片',
+                'error_code': 'USER_MODEL_IMAGE_NOT_SET',
+                'hint': '請先設定 user_image_url',
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        model_image_url = request.user.user_image_url
+        
+        # ⚠️ 檢測 localhost URL（Docker 容器內無法訪問）
+        if 'localhost:9000' in model_image_url or 'localhost:9001' in model_image_url:
+            model_image_url = model_image_url.replace('localhost:9000', 'minio:9000').replace('localhost:9001', 'minio:9001')
+            logger.warning(f'檢測到 localhost URL，已轉換為容器內 URL: {model_image_url}')
+        
+        # 嘗試下載模特照片
+        try:
+            model_img_resp = requests.get(model_image_url, timeout=30)
+            model_img_resp.raise_for_status()
+        except requests.exceptions.ConnectionError as e:
+            return Response({
+                'success': False,
+                'message': '無法訪問模特照片 URL',
+                'error_code': 'MODEL_IMAGE_CONNECTION_ERROR',
+                'hint': 'user_image_url 可能使用了 localhost:9000，請改用 http://minio:9000',
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except requests.exceptions.Timeout:
+            return Response({
+                'success': False,
+                'message': '下載模特照片超時',
+                'error_code': 'MODEL_IMAGE_TIMEOUT',
             }, status=status.HTTP_504_GATEWAY_TIMEOUT)
         
-        except Exception as e:
-            try_on.status = 'error'
-            try_on.ai_error_message = str(e)
-            try_on.save()
+        model_content_type = model_img_resp.headers.get('Content-Type', 'image/png')
+
+        # 準備衣服資料
+        garments = []
+        for idx, clothes in enumerate(ordered_clothes):
+            try:
+                garment_resp = requests.get(clothes.clothes_image_url, timeout=30)
+                garment_resp.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                return Response({
+                    'success': False,
+                    'message': f'無法下載衣服圖片：{clothes.clothes_uid}',
+                    'error_detail': str(e),
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            
+            garment_type = 'bottom' if idx == 1 else 'top'
+            garments.append({
+                'type': garment_type,
+                'image': ('garment.png', garment_resp.content, 'image/png'),
+            })
+
+        # 準備 AI 請求
+        ai_url = getattr(settings, 'AI_BACKEND_VIRTUAL_TRY_ON_URL', 'http://172.17.0.1:8002/virtual_try_on/clothes/combine')
+        
+        ai_files = {
+            'model_image': ('model.png', model_img_resp.content, model_content_type),
+        }
+        for i, (gtype, gimg) in enumerate([(g['type'], g['image']) for g in garments]):
+            ai_files[f'garment_{i}'] = gimg
+
+        ai_payload = {
+            'model_info': json.dumps(model_info, ensure_ascii=False),
+            'garments': json.dumps([{'type': g['type']} for g in garments], ensure_ascii=False),
+        }
+
+        # 調用 AI 後端
+        ai_response = requests.post(
+            ai_url,
+            files=ai_files,
+            data=ai_payload,
+            timeout=120,
+        )
+
+        if ai_response.status_code != 200:
+            try:
+                error_data = ai_response.json()
+            except:
+                error_data = {'message': ai_response.text}
             
             return Response({
                 'success': False,
-                'message': f'虛擬試衣失敗：{str(e)}',
+                'message': f'AI 後端返回錯誤：{ai_response.status_code}',
+                'ai_error': error_data,
             }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-    
-    except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'虛擬試衣請求處理失敗：{str(e)}',
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+        response_data = None
+        image_bytes = None
+        image_file_name = 'try_on_outfit.png'
 
-# ============================================================================
-# OUTFIT-003: 保存虛擬試衣為穿搭
-# ============================================================================
+        content_type = ai_response.headers.get('Content-Type', '').lower()
+        if 'multipart/mixed' in content_type:
+            response_data, image_bytes, image_file_name = _parse_multipart_mixed_response(ai_response)
+        else:
+            response_data = ai_response.json()
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def save_try_on_as_outfit(request, try_on_uid):
-    """
-    功能編號：OUTFIT-003-02
-    説明：
-    用戶確認虛擬試衣結果並直接保存為新穿搭
-    
-    請求參數（JSON）：
-    {
-        "outfit_name": "我喜歡的虛擬試衣",
-        "outfit_description": "舒適的搭配"
-    }
-    """
-    
-    try:
-        try_on = VirtualTryOn.objects.get(try_on_uid=try_on_uid)
-        
-        # 權限檢查
-        if try_on.user != request.user:
+        ai_message = str(response_data.get('message', ''))
+        if ai_message != '200':
             return Response({
                 'success': False,
-                'message': '沒有權限保存此虛擬試衣',
-            }, status=status.HTTP_403_FORBIDDEN)
-        
-        # 檢查虛擬試衣狀態
-        if try_on.status != 'completed':
-            return Response({
-                'success': False,
-                'message': '虛擬試衣尚未完成，無法保存',
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # 獲取請求參數
-        outfit_name = request.data.get('outfit_name', f'虛擬試衣 - {try_on.created_at.date()}')
-        outfit_description = request.data.get('outfit_description', '')
-        
-        # 創建穿搭直接關聯虛擬試衣
-        outfit = Outfit.objects.create(
-            outfit_name=outfit_name,
-            outfit_description=outfit_description,
-            created_by=request.user,
-            preview_image_url=try_on.result_image_url,
-            virtual_try_on=try_on,  # 直接設置FK
-            is_draft=False,
-        )
-        
-        # 添加關聯的衣服
-        for idx, clothes_uid in enumerate(try_on.clothes_list):
+                'message': f'AI 回傳失敗代碼：{ai_message}',
+                'ai_response': response_data,
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        file_name_from_ai = response_data.get('data', {}).get('file_name') or image_file_name
+        safe_file_name = f"try_on_{request.user.user_uid}_{timezone.now().timestamp()}.png"
+
+        # ✅ 上傳到 MinIO
+        result_image_url = None
+        if image_bytes:
             try:
-                clothes = Clothes.objects.get(clothes_uid=clothes_uid)
-                OutfitClothes.objects.create(
-                    outfit=outfit,
-                    clothes=clothes,
-                    position_order=idx
+                minio_client = Minio(
+                    settings.MINIO_ENDPOINT,
+                    access_key=settings.MINIO_ACCESS_KEY,
+                    secret_key=settings.MINIO_SECRET_KEY,
+                    secure=settings.MINIO_SECURE
                 )
-            except Clothes.DoesNotExist:
-                pass
+                
+                bucket_name = settings.MINIO_BUCKET_NAME
+                if not minio_client.bucket_exists(bucket_name):
+                    minio_client.make_bucket(bucket_name)
+                
+                minio_object_name = f"virtual-try-on/{safe_file_name}"
+                minio_client.put_object(
+                    bucket_name,
+                    minio_object_name,
+                    BytesIO(image_bytes),
+                    len(image_bytes),
+                    content_type='image/png'
+                )
+                
+                minio_external_url = getattr(settings, 'MINIO_EXTERNAL_URL', 'http://minio:9000')
+                result_image_url = f"{minio_external_url}/{bucket_name}/{minio_object_name}"
+                
+            except S3Error as minio_error:
+                logger.error(f"MinIO 上傳失敗：{minio_error}，使用備用 URL")
+                result_image_url = None
+            except Exception as e:
+                logger.error(f"MinIO 初始化失敗：{e}，使用備用 URL")
+                result_image_url = None
+
+        # 若 MinIO 上傳失敗，使用備用 URL
+        if not result_image_url:
+            result_image_url = (
+                f"{getattr(settings, 'MINIO_EXTERNAL_URL', 'http://minio:9000')}"
+                f"/{settings.MINIO_BUCKET_NAME}/virtual-try-on/{safe_file_name}"
+            )
+
+        # 構建衣服清單
+        clothes_list = []
+        for idx, clothes in enumerate(ordered_clothes):
+            clothes_list.append({
+                'position': idx + 1,
+                'clothes_uid': str(clothes.clothes_uid),
+                'clothes_category': clothes.clothes_category,
+                'clothes_image_url': clothes.clothes_image_url,
+            })
         
-        # 更新虛擬試衣記錄狀態
-        try_on.status = 'accepted'
-        try_on.confirmed_at = timezone.now()
-        try_on.save()
-        
-        # 返回保存結果
-        serializer = OutfitDetailSerializer(
-            outfit,
-            context={'request': request}
+        # 直接保存到 Model 表
+        model_style = response_data.get('data', {}).get('style_name', [])
+        model_result = Model.objects.create(
+            f_user_uid=str(request.user.user_uid),
+            model_uid=f"{request.user.user_uid}_{timezone.now().timestamp()}",
+            model_picture=result_image_url,
+            model_style=model_style,
+            clothes_list=clothes_list,
+            ai_response_data=response_data,
         )
-        
+
         return Response({
             'success': True,
-            'message': '虛擬試衣已保存為穿搭',
-            'data': serializer.data,
-        })
-    
-    except VirtualTryOn.DoesNotExist:
+            'message': '虛擬試穿完成',
+            'model_data': {
+                'model_uid': str(model_result.model_uid),
+                'f_user_uid': str(request.user.user_uid),
+                'status': 'completed',
+                'model_picture': result_image_url,
+                'model_style': model_style,
+                'clothes_count': len(ordered_clothes),
+                'ai_response': response_data,
+            }
+        }, status=status.HTTP_200_OK)
+
+    except requests.exceptions.Timeout:
         return Response({
             'success': False,
-            'message': '虛擬試衣記錄不存在',
-        }, status=status.HTTP_404_NOT_FOUND)
-    
+            'message': '虛擬試穿超時，請稍後重試',
+        }, status=status.HTTP_504_GATEWAY_TIMEOUT)
+
+    except requests.exceptions.RequestException as e:
+        return Response({
+            'success': False,
+            'message': f'無法連接 AI 後端：{str(e)}',
+        }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
     except Exception as e:
+        logger.error(f'虛擬試穿處理失敗：{str(e)}')
         return Response({
             'success': False,
-            'message': f'保存穿搭失敗：{str(e)}',
+            'message': f'虛擬試穿請求處理失敗：{str(e)}',
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # ============================================================================
-# OUTFIT-003: 查看虛擬試衣歷史
+# 查看我的試穿歷史
 # ============================================================================
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_my_try_ons(request):
     """
-    功能編號：新增
-    説明：
-    獲取當前用戶的虛擬試衣歷史記錄，支持篩選和分頁
+    查看當前用戶的虛擬試穿歷史
     
     查詢參數：
     - page: 頁碼（默認 1）
     - limit: 每頁數量（默認 20）
-    - status: 篩選狀態（可選：pending, processing, completed, accepted, error）
     """
     
     try:
-        queryset = VirtualTryOn.objects.filter(user=request.user).order_by('-created_at')
-        
-        # 篩選狀態
-        status_filter = request.query_params.get('status')
-        if status_filter:
-            queryset = queryset.filter(status=status_filter)
-        
-        # 分頁
         page = int(request.query_params.get('page', 1))
         limit = int(request.query_params.get('limit', 20))
         start_idx = (page - 1) * limit
         end_idx = start_idx + limit
         
+        queryset = Model.objects.filter(
+            f_user_uid=str(request.user.user_uid)
+        ).order_by('-model_created_time')
+        
         total_count = queryset.count()
         total_pages = (total_count + limit - 1) // limit
-        paginated_queryset = queryset[start_idx:end_idx]
         
-        serializer = VirtualTryOnSerializer(
-            paginated_queryset,
-            many=True,
-            context={'request': request}
-        )
+        paginated_queryset = queryset[start_idx:end_idx]
+        serializer = ModelSerializer(paginated_queryset, many=True)
         
         return Response({
             'success': True,
-            'message': '虛擬試衣歷史獲取成功',
+            'message': '試穿歷史獲取成功',
             'count': total_count,
             'total_pages': total_pages,
             'current_page': page,
@@ -679,171 +422,42 @@ def get_my_try_ons(request):
     except Exception as e:
         return Response({
             'success': False,
-            'message': f'獲取虛擬試衣歷史失敗：{str(e)}',
+            'message': f'獲取試穿歷史失敗：{str(e)}',
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # ============================================================================
-# OUTFIT-004: 穿搭互動 - 標記為喜歡/收藏
+# 查看單筆試穿詳情
 # ============================================================================
 
-@api_view(['PATCH'])
+@api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def outfit_toggle_favorite(request, outfit_uid):
+def get_try_on_detail(request, model_uid):
     """
-    功能編號：OUTFIT-004-01
-    説明：標記/取消標記穿搭為喜歡
+    查看單個試穿結果的詳細信息
     
-    請求參數：
-    {
-        "is_liked": true  # true：喜歡；false：取消喜歡
-    }
+    路徑參數：
+    - model_uid: 試穿結果 UUID
     """
     
     try:
-        outfit = Outfit.objects.get(outfit_uid=outfit_uid)
-        is_liked = request.data.get('is_liked', True)
+        model = Model.objects.get(model_uid=model_uid, f_user_uid=str(request.user.user_uid))
+        serializer = ModelSerializer(model)
         
-        if is_liked:
-            # 添加收藏
-            favorite, created = OutfitFavorite.objects.get_or_create(
-                outfit=outfit,
-                user=request.user
-            )
-            
-            if created:
-                return Response({
-                    'success': True,
-                    'message': '已收藏此穿搭',
-                    'is_liked': True,
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'success': False,
-                    'message': '您已收藏此穿搭',
-                }, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            # 取消收藏
-            favorite = OutfitFavorite.objects.filter(
-                outfit=outfit,
-                user=request.user
-            ).delete()
-            
-            return Response({
-                'success': True,
-                'message': '已取消收藏',
-                'is_liked': False,
-            }, status=status.HTTP_200_OK)
+        return Response({
+            'success': True,
+            'message': '試穿詳情獲取成功',
+            'data': serializer.data,
+        })
     
-    except Outfit.DoesNotExist:
+    except Model.DoesNotExist:
         return Response({
             'success': False,
-            'message': '穿搭不存在',
+            'message': '試穿紀錄不存在或沒有權限訪問',
         }, status=status.HTTP_404_NOT_FOUND)
     
     except Exception as e:
         return Response({
             'success': False,
-            'message': f'操作失敗：{str(e)}',
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-# ============================================================================
-# 查看我的穿搭
-# ============================================================================
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def my_outfits(request):
-    """
-    獲取當前用戶建立的所有穿搭
-    
-    查詢參數：
-    - page: 頁碼
-    - limit: 每頁數量
-    - is_draft: 是否顯示草稿
-    """
-    
-    try:
-        queryset = Outfit.objects.filter(created_by=request.user)
-        
-        # 是否顯示草稿
-        is_draft = request.query_params.get('is_draft')
-        if is_draft is not None:
-            queryset = queryset.filter(is_draft=(is_draft.lower() == 'true'))
-        
-        # 分頁
-        page = int(request.query_params.get('page', 1))
-        limit = int(request.query_params.get('limit', 20))
-        start_idx = (page - 1) * limit
-        end_idx = start_idx + limit
-        
-        total_count = queryset.count()
-        paginated_queryset = queryset[start_idx:end_idx]
-        
-        serializer = OutfitSerializer(
-            paginated_queryset,
-            many=True,
-            context={'request': request}
-        )
-        
-        return Response({
-            'success': True,
-            'message': '我的穿搭獲取成功',
-            'count': total_count,
-            'results': serializer.data,
-        })
-    
-    except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'獲取我的穿搭失敗：{str(e)}',
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-# ============================================================================
-# 查看我喜歡的穿搭
-# ============================================================================
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def my_favorite_outfits(request):
-    """
-    獲取當前用戶收藏的所有穿搭
-    """
-    
-    try:
-        # 獲取用戶收藏的穿搭
-        favorites = OutfitFavorite.objects.filter(
-            user=request.user
-        ).select_related('outfit').order_by('-liked_at')
-        
-        # 分頁
-        page = int(request.query_params.get('page', 1))
-        limit = int(request.query_params.get('limit', 20))
-        start_idx = (page - 1) * limit
-        end_idx = start_idx + limit
-        
-        total_count = favorites.count()
-        paginated_favorites = favorites[start_idx:end_idx]
-        
-        # 序列化穿搭
-        outfits = [fav.outfit for fav in paginated_favorites]
-        serializer = OutfitSerializer(
-            outfits,
-            many=True,
-            context={'request': request}
-        )
-        
-        return Response({
-            'success': True,
-            'message': '我的收藏獲取成功',
-            'count': total_count,
-            'results': serializer.data,
-        })
-    
-    except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'獲取我的收藏失敗：{str(e)}',
+            'message': f'獲取試穿詳情失敗：{str(e)}',
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

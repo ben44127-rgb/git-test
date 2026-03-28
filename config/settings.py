@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'corsheaders',                   # 跨域資源共享(CORS)支援
     'picture',                       # 圖片處理應用
     'accounts',                      # 用戶認證應用
+    'combine',                       # 穿搭與虛擬試穿應用
 ]
 
 # 中間件配置

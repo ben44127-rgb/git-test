@@ -95,6 +95,8 @@ services:
       # 掛載程式碼目錄以支援 hot reload（開發模式）
       - ./accounts:/app/accounts
       - ./config:/app/config
+      - ./picture:/app/picture
+      - ./combine:/app/combine
       - ./manage.py:/app/manage.py
       - ./start.sh:/app/start.sh
       # 日誌目錄

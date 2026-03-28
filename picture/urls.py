@@ -40,13 +40,9 @@ urlpatterns = [
     # PATCH: /picture/clothes/<clothes_uid>/favorite
     path('picture/clothes/<str:clothes_uid>/favorite', views.toggle_favorite, name='toggle_favorite'),
     
-    # ========== 用戶個人照片管理端點 ==========
-    # POST: 上傳個人照片
-    # GET: 獲取用戶的所有照片列表
-    path('picture/user/photo', views.upload_user_photo, name='upload_user_photo'),
-    
-    # GET: 獲取單張照片詳情
-    # PUT: 更新照片（替換照片文件）
-    # DELETE: 刪除照片
-    path('picture/user/photo/<str:user_uid>/', views.photo_detail, name='photo_detail'),
+    # ========== 用戶模型照片管理端點 ==========
+    # 用戶模型照片上傳/更新和獲取
+    # POST: /picture/user/photo （multipart/form-data，上傳模型照片）
+    # GET: /picture/user/photo （獲取當前用戶的模型照片 URL）
+    path('picture/user/photo', views.user_photo, name='user_photo'),
 ]

@@ -39,7 +39,7 @@ from minio.error import S3Error  # MinIO 的錯誤類型
 from requests_toolbelt.multipart import decoder as multipart_decoder
 
 # 資料庫模型匯入
-from accounts.models import Clothes, Style, Color, Photo
+from accounts.models import Clothes, Style, Color
 
 # JWT 認證匯入
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -824,8 +824,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.core.paginator import Paginator
-from accounts.models import Clothes, Style, Color, User, Photo
-from .serializers import ClothesSerializer, ClothesCreateSerializer, ClothesDetailSerializer, PhotoSerializer
+from accounts.models import Clothes, Style, Color, User
+from .serializers import ClothesSerializer, ClothesCreateSerializer, ClothesDetailSerializer
 import uuid
 
 
@@ -1160,360 +1160,289 @@ def clothes_detail(request, clothes_uid):
             )
 
 
+# ==========================================
+# 【用戶模型照片管理 API】
+# ==========================================
 @api_view(['POST', 'GET'])
 @permission_classes([IsAuthenticated])
-def upload_user_photo(request):
+def user_photo(request):
     """
-    用戶個人照片管理端點（列表和上傳）
+    用戶模型照片管理 API
     
-    POST: 上傳用戶的個人照片（全身照或其他個人照片）
-    GET: 獲取用戶的所有照片列表
+    功能 2.3: 用戶模型照片管理
+    - 上傳/更新用戶的模型照片
+    - 獲取用戶當前的模型照片 URL
     
-    URL: /picture/user/photo
+    POST 請求：上傳或更新用戶模型照片
+    =====================================
+    請求位址：POST /picture/user/photo
+    認證方式：JWT Token (Authorization: Bearer <token>)
+    Content-Type: multipart/form-data
     
-    POST 流程：
-    1. 接收用戶上傳的照片文件
-    2. 驗證文件格式和大小
-    3. 上傳到 MinIO 存儲
-    4. 建立 Photo 記錄
-    5. 更新用戶的 user_image_url 字段
-    6. 返回圖片信息
+    請求參數：
+    - photo_file: 圖片檔案（二進位，必填）
     
-    GET 流程：
-    1. 獲取查詢參數（分頁）
-    2. 查詢用戶的所有照片
-    3. 分頁返回
+    允許的格式：JPG, PNG, GIF, WebP
+    最大大小：10MB
+    功能：每個用戶只能擁有一張模型照片，新上傳會覆蓋舊照片
+    
+    成功響應（201 Created 或 200 OK）：
+    {
+        "success": true,
+        "message": "模型照片已上傳",
+        "data": {
+            "user_uid": "user_123",
+            "user_image_url": "http://minio:9000/bucket/photo.jpg",
+            "upload_time": "2024-01-01T12:00:00Z"
+        }
+    }
+    
+    錯誤響應：
+    - 400 Bad Request: 未提供 photo_file 或格式/大小不符
+    - 401 Unauthorized: 未提供 JWT Token 或 Token 無效
+    - 403 Forbidden: 無法修改他人的照片
+    - 500 Internal Server Error: 伺服器錯誤
+    
+    
+    GET 請求：獲取當前用戶的模型照片 URL
+    =====================================
+    請求位址：GET /picture/user/photo
+    認證方式：JWT Token (Authorization: Bearer <token>)
+    
+    成功響應（200 OK）：
+    {
+        "success": true,
+        "message": "獲取成功",
+        "data": {
+            "user_uid": "user_123",
+            "user_image_url": "http://minio:9000/bucket/photo.jpg",
+            "upload_time": "2024-01-01T12:00:00Z"
+        }
+    }
+    
+    未設置照片（404 Not Found）：
+    {
+        "success": false,
+        "message": "用戶未設置模型照片"
+    }
+    
+    錯誤響應：
+    - 401 Unauthorized: 未提供 JWT Token 或 Token 無效
+    - 500 Internal Server Error: 伺服器錯誤
     """
     
+    # ==========================================
+    # 【POST 請求：上傳用戶模型照片】
+    # ==========================================
     if request.method == 'POST':
-        try:
-            # 驗證文件
-            if 'photo_file' not in request.FILES:
-                return Response(
-                    {'detail': '缺少照片檔案 (photo_file)'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            photo_file = request.FILES['photo_file']
-            
-            # 驗證文件大小 (最大 10MB)
-            if photo_file.size > 10 * 1024 * 1024:
-                return Response(
-                    {'detail': '檔案過大，最多 10MB'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            # 驗證文件類型（處理 content_type 為空的情況）
-            allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-            content_type = photo_file.content_type
-            
-            # 如果 content_type 為空，根據檔案副檔名推斷
-            if not content_type:
-                file_name_lower = photo_file.name.lower() if photo_file.name else ''
-                if file_name_lower.endswith('.jpg') or file_name_lower.endswith('.jpeg'):
-                    content_type = 'image/jpeg'
-                elif file_name_lower.endswith('.png'):
-                    content_type = 'image/png'
-                elif file_name_lower.endswith('.gif'):
-                    content_type = 'image/gif'
-                elif file_name_lower.endswith('.webp'):
-                    content_type = 'image/webp'
-                else:
-                    return Response(
-                        {'detail': f'不支持的檔案類型：無法確定文件類型，請確保文件有正確的副檔名'},
-                        status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
-                    )
-                logger.warning(f"⚠️ Content-Type 為空，已根據副檔名推斷: {content_type}")
-            
-            if content_type not in allowed_types:
-                return Response(
-                    {'detail': f'不支持的檔案類型: {content_type}'},
-                    status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
-                )
-            
-            # 取得 MinIO 客戶端
-            minio_client = get_minio_client()
-            if not minio_client:
-                logger.error("❌ 無法連接到 MinIO 服務")
-                return Response(
-                    {'detail': '圖片存儲服務不可用'},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE
-                )
-            
-            # 生成唯一的文件名
-            file_ext = photo_file.name.split('.')[-1] if '.' in photo_file.name else 'jpg'
-            file_name = f"user_{request.user.user_uid}_photo_{uuid.uuid4()}.{file_ext}"
-            
-            # 讀取文件內容（確保指針在開頭）
-            photo_file.seek(0)  # 重置上傳檔案的指針
-            photo_data = photo_file.read()
-            photo_stream = io.BytesIO(photo_data)
-            photo_stream.seek(0)  # 重置 BytesIO 指針
-            
-            # 上傳到 MinIO
-            try:
-                bucket_name = settings.MINIO_BUCKET_NAME
-                minio_client.put_object(
-                    bucket_name,
-                    file_name,
-                    photo_stream,
-                    len(photo_data),
-                    content_type=content_type
-                )
-                logger.info(f"✅ 用戶照片已上傳到 MinIO: {file_name}")
-            except S3Error as e:
-                logger.error(f"❌ MinIO 上傳失敗: {str(e)}")
-                return Response(
-                    {'detail': '圖片上傳失敗'},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE
-                )
-            
-            # 生成 MinIO URL
-            minio_host = settings.MINIO_EXTERNAL_URL.rstrip('/')
-            photo_url = f"{minio_host}/{bucket_name}/{file_name}"
-            
-            # 建立 Photo 記錄
-            photo = Photo.objects.create(
-                photo_uid=str(uuid.uuid4()),
-                f_user_uid=str(request.user.user_uid),
-                photo_url=photo_url,
-                photo_filename=file_name,
-                photo_file_size=photo_file.size,
-                photo_content_type=content_type
-            )
-            
-            # 更新用戶的 image_url（設為最新一張照片）
-            user = request.user
-            user.user_image_url = photo_url
-            user.save()
-            
-            logger.info(f"✅ 用戶 {user.user_name} 上傳個人照片成功")
-            
-            serializer = PhotoSerializer(photo)
+        logger.info("=" * 50)
+        logger.info("📥 收到用戶模型照片上傳請求")
+        
+        # 取得當前用戶
+        user = request.user
+        user_uid = str(user.user_uid)
+        logger.info(f"👤 用戶 UID: {user_uid}")
+        
+        # 【步驟 1】檢查請求是否包含 photo_file 欄位
+        if 'photo_file' not in request.FILES:
+            logger.error("❌ 請求中未找到 'photo_file' 欄位")
             return Response(
                 {
-                    'success': True,
-                    'message': '個人照片上傳成功',
-                    'photo': serializer.data,
-                    'user_image_url': user.user_image_url
+                    'success': False,
+                    'message': '請上傳圖片檔案（欄位名稱：photo_file）'
                 },
-                status=status.HTTP_201_CREATED
+                status=status.HTTP_400_BAD_REQUEST
             )
         
-        except Exception as e:
-            logger.error(f"❌ 上傳個人照片失敗: {str(e)}")
+        photo_file = request.FILES['photo_file']
+        logger.info(f"📷 接收到圖片")
+        logger.info(f"   檔案大小：{photo_file.size} bytes")
+        logger.info(f"   內容類型：{photo_file.content_type}")
+        
+        # 【步驟 2】驗證檔案格式
+        allowed_formats = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+        if photo_file.content_type not in allowed_formats:
+            logger.error(f"❌ 不支援的檔案格式：{photo_file.content_type}")
             return Response(
-                {'detail': f'上傳失敗: {str(e)}'},
+                {
+                    'success': False,
+                    'message': '不支援的檔案格式。允許的格式：JPG, PNG, GIF, WebP'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        logger.info(f"✅ 檔案格式驗證通過：{photo_file.content_type}")
+        
+        # 【步驟 3】驗證檔案大小（最大 10MB）
+        max_size = 10 * 1024 * 1024  # 10MB
+        if photo_file.size > max_size:
+            logger.error(f"❌ 檔案大小超過限制：{photo_file.size} > {max_size}")
+            return Response(
+                {
+                    'success': False,
+                    'message': f'檔案大小不能超過 10MB（當前大小：{photo_file.size // 1024}KB）'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        logger.info(f"✅ 檔案大小驗證通過：{photo_file.size} bytes")
+        
+        # 【步驟 4】讀取檔案內容
+        try:
+            photo_file.seek(0)
+            file_bytes = photo_file.read()
+            logger.info(f"✅ 圖片讀取成功，大小：{len(file_bytes)} bytes")
+        except Exception as e:
+            logger.error(f"❌ 讀取圖片失敗：{e}")
+            return Response(
+                {
+                    'success': False,
+                    'message': f'讀取圖片失敗：{str(e)}'
+                },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+        
+        # 【步驟 5】上傳到 MinIO
+        logger.info("💾 開始上傳圖片到 MinIO...")
+        
+        # 決定副檔名和 content_type
+        format_mapping = {
+            'image/jpeg': {'ext': '.jpg', 'content_type': 'image/jpeg'},
+            'image/png':  {'ext': '.png', 'content_type': 'image/png'},
+            'image/gif':  {'ext': '.gif', 'content_type': 'image/gif'},
+            'image/webp': {'ext': '.webp', 'content_type': 'image/webp'},
+        }
+        format_info = format_mapping.get(
+            photo_file.content_type,
+            {'ext': '.jpg', 'content_type': 'image/jpeg'}
+        )
+        
+        # 產生唯一檔案名稱：user_uid + 時間戳 + 隨機ID
+        unique_id = uuid.uuid4().hex[:8]
+        unique_filename = f"user_photo_{user_uid}_{unique_id}{format_info['ext']}"
+        logger.info(f"   MinIO 檔案名稱：{unique_filename}")
+        
+        # 取得 MinIO 客戶端
+        minio_client = get_minio_client()
+        if minio_client is None:
+            logger.error("❌ MinIO 客戶端不可用")
+            return Response(
+                {
+                    'success': False,
+                    'message': '儲存服務不可用'
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        
+        # 上傳到 MinIO
+        try:
+            file_data = io.BytesIO(file_bytes)
+            file_length = len(file_bytes)
+            
+            minio_client.put_object(
+                settings.MINIO_BUCKET_NAME,
+                unique_filename,
+                file_data,
+                file_length,
+                content_type=format_info['content_type']
+            )
+            
+            logger.info(f"✅ 成功上傳到 MinIO：{settings.MINIO_BUCKET_NAME}/{unique_filename}")
+            
+        except S3Error as e:
+            logger.error(f"❌ 上傳到 MinIO 失敗：{e}")
+            return Response(
+                {
+                    'success': False,
+                    'message': '圖片儲存失敗（MinIO 上傳出錯）'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        except Exception as e:
+            logger.error(f"❌ 上傳過程發生錯誤：{e}")
+            return Response(
+                {
+                    'success': False,
+                    'message': f'圖片儲存失敗：{str(e)}'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        # 【步驟 6】產生公開 URL
+        try:
+            public_url = f"{settings.MINIO_EXTERNAL_URL}/{settings.MINIO_BUCKET_NAME}/{unique_filename}"
+            logger.info(f"✅ 公開 URL：{public_url[:100]}...")
+        except Exception as e:
+            logger.error(f"❌ 產生 URL 失敗：{e}")
+            public_url = None
+        
+        # 【步驟 7】更新 User 表中的 user_image_url 欄位
+        try:
+            user.user_image_url = public_url
+            user.save()
+            logger.info(f"✅ 已更新用戶的 user_image_url")
+        except Exception as e:
+            logger.error(f"❌ 更新用戶資訊失敗：{e}")
+            return Response(
+                {
+                    'success': False,
+                    'message': f'更新用戶資訊失敗：{str(e)}'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        logger.info("=" * 50)
+        logger.info("✅ 用戶模型照片上傳成功")
+        logger.info("=" * 50)
+        
+        # 【步驟 8】返回成功響應
+        return Response(
+            {
+                'success': True,
+                'message': '模型照片已上傳',
+                'data': {
+                    'user_uid': user_uid,
+                    'user_image_url': public_url,
+                    'upload_time': user.updated_at.isoformat() if hasattr(user, 'updated_at') else None
+                }
+            },
+            status=status.HTTP_201_CREATED
+        )
     
+    # ==========================================
+    # 【GET 請求：獲取用戶模型照片 URL】
+    # ==========================================
     elif request.method == 'GET':
-        try:
-            # 獲取查詢參數
-            page = request.query_params.get('page', 1)
-            limit = request.query_params.get('limit', 20)
-            
-            # 查詢用戶的所有照片
-            queryset = Photo.objects.filter(
-                f_user_uid=str(request.user.user_uid)
-            ).order_by('-photo_uploaded_time')
-            
-            logger.info(f"✅ 用戶 {request.user.user_name} 查看照片列表，共 {queryset.count()} 張")
-            
-            # 分頁
-            paginator = Paginator(queryset, int(limit))
-            paginated_photos = paginator.get_page(int(page))
-            
-            # 序列化
-            serializer = PhotoSerializer(paginated_photos, many=True)
-            
-            return Response({
-                'count': paginator.count,
-                'total_pages': paginator.num_pages,
-                'current_page': int(page),
-                'results': serializer.data
-            }, status=status.HTTP_200_OK)
+        logger.info("=" * 50)
+        logger.info("📤 收到用戶模型照片查詢請求")
         
-        except Exception as e:
-            logger.error(f"❌ 獲取照片列表失敗: {str(e)}")
+        # 取得當前用戶
+        user = request.user
+        user_uid = str(user.user_uid)
+        logger.info(f"👤 用戶 UID: {user_uid}")
+        
+        # 檢查 user_image_url 是否已設置
+        if not user.user_image_url:
+            logger.info(f"⚠️  用戶 {user_uid} 未設置模型照片")
             return Response(
-                {'detail': f'獲取失敗: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {
+                    'success': False,
+                    'message': '用戶未設置模型照片'
+                },
+                status=status.HTTP_404_NOT_FOUND
             )
-
-
-@api_view(['GET', 'PUT', 'DELETE'])
-@permission_classes([IsAuthenticated])
-def photo_detail(request, user_uid):
-    """
-    用戶照片詳情端點
-    
-    GET: 獲取單張照片詳情
-    PUT: 更新照片（替換照片文件）
-    DELETE: 刪除照片
-    
-    URL: /picture/user/photo/<user_uid>/
-    """
-    
-    # 獲取照片 - 如果有多張，獲取最新的
-    photo = Photo.objects.filter(f_user_uid=user_uid).order_by('-photo_updated_time').first()
-    if not photo:
+        
+        logger.info(f"✅ 用戶 {user_uid} 的模型照片 URL：{user.user_image_url[:100]}...")
+        logger.info("=" * 50)
+        
+        # 返回用戶的模型照片 URL
         return Response(
-            {'detail': '照片不存在'},
-            status=status.HTTP_404_NOT_FOUND
-        )
-    
-    # 檢查權限 - 只有照片所有者可以訪問
-    if str(photo.f_user_uid) != str(request.user.user_uid) and not (request.user.is_staff or request.user.is_superuser):
-        return Response(
-            {'detail': '你沒有權限訪問此照片'},
-            status=status.HTTP_403_FORBIDDEN
-        )
-    
-    if request.method == 'GET':
-        try:
-            serializer = PhotoSerializer(photo)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except Exception as e:
-            logger.error(f"❌ 獲取照片詳情失敗: {str(e)}")
-            return Response(
-                {'detail': f'獲取失敗: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-    
-    elif request.method == 'PUT':
-        try:
-            # 驗證新文件
-            if 'photo_file' not in request.FILES:
-                return Response(
-                    {'detail': '缺少照片檔案 (photo_file)'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            photo_file = request.FILES['photo_file']
-            
-            # 驗證文件大小
-            if photo_file.size > 10 * 1024 * 1024:
-                return Response(
-                    {'detail': '檔案過大，最多 10MB'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            # 驗證文件類型（處理 content_type 為空的情況）
-            allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-            content_type = photo_file.content_type
-            
-            # 如果 content_type 為空，根據檔案副檔名推斷
-            if not content_type:
-                file_name_lower = photo_file.name.lower() if photo_file.name else ''
-                if file_name_lower.endswith('.jpg') or file_name_lower.endswith('.jpeg'):
-                    content_type = 'image/jpeg'
-                elif file_name_lower.endswith('.png'):
-                    content_type = 'image/png'
-                elif file_name_lower.endswith('.gif'):
-                    content_type = 'image/gif'
-                elif file_name_lower.endswith('.webp'):
-                    content_type = 'image/webp'
-                else:
-                    return Response(
-                        {'detail': f'不支持的檔案類型：無法確定文件類型，請確保文件有正確的副檔名'},
-                        status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
-                    )
-                logger.warning(f"⚠️ Content-Type 為空，已根據副檔名推斷: {content_type}")
-            
-            if content_type not in allowed_types:
-                return Response(
-                    {'detail': f'不支持的檔案類型: {content_type}'},
-                    status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
-                )
-            
-            # 取得 MinIO 客戶端
-            minio_client = get_minio_client()
-            if not minio_client:
-                return Response(
-                    {'detail': '圖片存儲服務不可用'},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE
-                )
-            
-            # 生成唯一的文件名（使用照片所有者的 user_uid）
-            file_ext = photo_file.name.split('.')[-1] if '.' in photo_file.name else 'jpg'
-            file_name = f"user_{photo.f_user_uid}_photo_{uuid.uuid4()}.{file_ext}"
-            
-            # 讀取文件內容（確保指針在開頭）
-            photo_file.seek(0)  # 重置上傳檔案的指針
-            photo_data = photo_file.read()
-            photo_stream = io.BytesIO(photo_data)
-            photo_stream.seek(0)  # 重置 BytesIO 指針
-            
-            # 【調試日誌】PUT 端點的詳細信息
-            logger.info(f"🔍 【PUT 更新檔案】調試信息:")
-            logger.info(f"    - 上傳的檔案名: {photo_file.name}")
-            logger.info(f"    - 上傳的檔案大小: {photo_file.size} bytes")
-            logger.info(f"    - 讀取到的數據大小: {len(photo_data)} bytes")
-            logger.info(f"    - 生成的 MinIO 檔案名: {file_name}")
-            logger.info(f"    - BytesIO 流位置: {photo_stream.tell()}")
-            logger.info(f"    - 上傳到 bucket: {settings.MINIO_BUCKET_NAME}")
-            
-            # 上傳到 MinIO
-            try:
-                bucket_name = settings.MINIO_BUCKET_NAME
-                minio_client.put_object(
-                    bucket_name,
-                    file_name,
-                    photo_stream,
-                    len(photo_data),
-                    content_type=content_type
-                )
-                logger.info(f"✅ 【PUT】已成功上傳到 MinIO: {file_name}")
-            except S3Error as e:
-                logger.error(f"❌ MinIO 上傳失敗: {str(e)}")
-                return Response(
-                    {'detail': '圖片上傳失敗'},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE
-                )
-            
-            # 生成 MinIO URL
-            minio_host = settings.MINIO_EXTERNAL_URL.rstrip('/')
-            photo_url = f"{minio_host}/{bucket_name}/{file_name}"
-            
-            # 更新 Photo 記錄
-            photo.photo_url = photo_url
-            photo.photo_filename = file_name
-            photo.photo_file_size = photo_file.size
-            photo.photo_content_type = content_type
-            photo.save()
-            
-            logger.info(f"✅ 用戶 {request.user.user_name} 更新照片成功: {photo.photo_id}")
-            
-            serializer = PhotoSerializer(photo)
-            return Response({
+            {
                 'success': True,
-                'message': '照片已更新',
-                'photo': serializer.data
-            }, status=status.HTTP_200_OK)
-        
-        except Exception as e:
-            logger.error(f"❌ 更新照片失敗: {str(e)}")
-            return Response(
-                {'detail': f'更新失敗: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-    
-    elif request.method == 'DELETE':
-        try:
-            photo_id_to_delete = photo.photo_id
-            photo.delete()
-            logger.info(f"✅ 用戶 {request.user.user_name} 刪除照片成功: {photo_id_to_delete}")
-            
-            return Response({
-                'success': True,
-                'message': '照片已刪除'
-            }, status=status.HTTP_200_OK)
-        
-        except Exception as e:
-            logger.error(f"❌ 刪除照片失敗: {str(e)}")
-            return Response(
-                {'detail': f'刪除失敗: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
+                'message': '獲取成功',
+                'data': {
+                    'user_uid': user_uid,
+                    'user_image_url': user.user_image_url,
+                    'upload_time': user.updated_at.isoformat() if hasattr(user, 'updated_at') else None
+                }
+            },
+            status=status.HTTP_200_OK
+        )
