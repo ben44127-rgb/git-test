@@ -179,6 +179,20 @@ start_docker() {
     
     ensure_env_file
     echo ""
+    
+    # 驗證必要的環境變量
+    echo "🔍 驗證 .env 檔案中的關鍵配置..."
+    required_vars=("DB_HOST" "DB_PORT" "DB_NAME" "DB_USER" "DB_PASSWORD" "MINIO_ENDPOINT")
+    for var in "${required_vars[@]}"; do
+        value=$(grep "^${var}=" .env | cut -d= -f2-)
+        if [ -z "$value" ]; then
+            echo "❌ 警告：.env 中缺少 $var 配置"
+        else
+            echo "   ✓ $var = $value"
+        fi
+    done
+    echo ""
+    
     check_docker
     echo ""
     
@@ -316,7 +330,7 @@ start_local() {
         echo ""
         echo "🐳 偵測到 Docker，啟動 PostgreSQL 和 MinIO 容器..."
         check_docker
-        $COMPOSE_CMD up -d db minio
+        $COMPOSE_CMD up -d postgres minio
         echo "⏳ 等待數據庫伺務就緒..."
         sleep 5
         wait_for_service "PostgreSQL" "localhost" "9090"
@@ -436,8 +450,21 @@ start_container() {
     echo "📦 在 Docker 容器內部啟動..."
     echo ""
 
+    # 驗證必要的環境變量
+    echo "🔍 驗證環境變量設定..."
+    required_vars=("DB_HOST" "DB_PORT" "DB_NAME" "DB_USER" "DB_PASSWORD" "MINIO_ENDPOINT")
+    for var in "${required_vars[@]}"; do
+        if [ -z "${!var}" ]; then
+            echo "❌ 錯誤：缺少必要環境變量 $var"
+            exit 1
+        fi
+        echo "   ✓ $var = ${!var}"
+    done
+    echo ""
+
     # 等待 PostgreSQL 數據庫就緒（使用 Python psycopg2 確認連線）
     echo "⏳ 等待 PostgreSQL 數據庫就緒..."
+    echo "   連接信息: ${DB_USER}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
     MAX_RETRIES=30
     RETRY=0
     until python3 -c "
@@ -447,8 +474,8 @@ try:
         dbname='${DB_NAME:-auth_db}',
         user='${DB_USER:-auth_user}',
         password='${DB_PASSWORD:-auth_password_123}',
-        host='${DB_HOST:-db}',
-        port='${DB_PORT:-5432}'
+        host='${DB_HOST:-postgres}',
+        port='${DB_PORT:-9090}'
     )
     conn.close()
     print('✅ 數據庫連線成功')

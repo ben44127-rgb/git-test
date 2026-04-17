@@ -64,6 +64,34 @@ echo "=========================================="
 echo ""
 
 # ==========================================
+# 檢查 Docker 環境
+# ==========================================
+check_docker() {
+    echo "🔍 檢查 Docker 和 Docker Compose..."
+    if ! command -v docker &> /dev/null; then
+        echo "⚠️  警告：未找到 Docker，某些功能可能無法使用"
+        return 1
+    fi
+
+    if ! docker info &> /dev/null; then
+        echo "⚠️  警告：Docker 未運行"
+        return 1
+    fi
+
+    COMPOSE_CMD=""
+    if docker compose version &> /dev/null 2>&1; then
+        COMPOSE_CMD="docker compose"
+    elif command -v docker-compose &> /dev/null; then
+        COMPOSE_CMD="docker-compose"
+    else
+        echo "⚠️  警告：未找到 docker-compose"
+        return 1
+    fi
+    echo "✅ Docker 環境檢查完成，使用命令：$COMPOSE_CMD"
+    return 0
+}
+
+# ==========================================
 # 停止本地開發伺伺器
 # ==========================================
 stop_local() {
@@ -78,15 +106,21 @@ stop_local() {
         echo "⚠️  未找到運行中的 Django 進程"
         
         # 檢查端口是否被佔用
-        if command -v lsof &> /dev/null && lsof -Pi :30000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-            PORT_PID=$(lsof -Pi :30000 -sTCP:LISTEN -t)
-            echo "⚠️  但端口 30000 被進程 $PORT_PID 佔用"
-            kill $PORT_PID 2>/dev/null || true
-            sleep 1
+        if command -v lsof &> /dev/null; then
             if lsof -Pi :30000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-                kill -9 $PORT_PID 2>/dev/null || true
+                PORT_PID=$(lsof -Pi :30000 -sTCP:LISTEN -t)
+                echo "⚠️  但端口 30000 被進程 $PORT_PID 佔用"
+                echo "   嘗試清理端口..."
+                kill $PORT_PID 2>/dev/null || true
+                sleep 1
+                if lsof -Pi :30000 -sTCP:LISTEN -t >/dev/null 2>&1; then
+                    echo "   使用強制停止..."
+                    kill -9 $PORT_PID 2>/dev/null || true
+                fi
+                echo "✅ 端口已清理"
             fi
-            echo "✅ 進程已停止"
+        else
+            echo "   未安裝 lsof，無法檢查端口佔用"
         fi
     else
         echo "🛑 正在停止 Django 應用..."
@@ -133,13 +167,28 @@ stop_docker() {
         return
     fi
     
+    # 驗證 .env 檔案是否存在
+    if [ ! -f .env ]; then
+        echo "⚠️  未找到 .env 檔案"
+        echo "   嘗試從 .env.example 複製..."
+        if [ -f .env.example ]; then
+            cp .env.example .env
+            echo "✅ 已建立 .env 檔案"
+        else
+            echo "❌ 錯誤：.env 和 .env.example 都不存在"
+            return
+        fi
+    else
+        echo "✅ .env 檔案已驗證"
+    fi
+    
     # 確定使用哪個命令
     if docker compose version &> /dev/null 2>&1; then
         COMPOSE_CMD="docker compose"
     elif command -v docker-compose &> /dev/null; then
         COMPOSE_CMD="docker-compose"
     else
-        echo "⚠️  未找到 docker-compose，跳過"
+        echo "❌ 未找到 docker-compose，無法停止 Docker 伺務"
         return
     fi
     
@@ -174,9 +223,15 @@ stop_docker() {
 if [ "$FORCE_MODE" = "local" ]; then
     stop_local
 elif [ "$FORCE_MODE" = "docker" ]; then
+    check_docker > /dev/null 2>&1 || true  # 不因為 Docker 檢查失敗而退出
+    echo ""
     stop_docker
 elif [ "$FORCE_MODE" = "all" ]; then
     # 停止所有模式
+    echo "🔍 執行環境檢查..."
+    check_docker > /dev/null 2>&1 || true  # 不因為 Docker 檢查失敗而退出
+    echo ""
+    
     stop_docker
     echo ""
     stop_local
