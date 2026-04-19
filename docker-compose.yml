@@ -12,15 +12,16 @@ services:
       POSTGRES_DB: ${DB_NAME:-auth_db}
       POSTGRES_USER: ${DB_USER:-auth_user}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-auth_password_123}
-    command: postgres -c port=9090
+    # PostgreSQL 容器內監聽標準 port 5432，映射到外部 9090
     ports:
-      - "9090:9090"
+      - "9090:5432"
+    command: postgres -c port=5432
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - app-network
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U auth_user -d auth_db -p 9090" ]
+      test: [ "CMD-SHELL", "pg_isready -U auth_user -d auth_db -p 5432" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -39,7 +40,7 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
 
       # 啟用跨域資源共享 (CORS)，允許前端訪問圖片
-      MINIO_BROWSER_REDIRECT_URL: http://localhost:9001
+      MINIO_BROWSER_REDIRECT_URL: http://35.201.135.229:9001
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data # 持久化數據
