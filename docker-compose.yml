@@ -66,6 +66,7 @@ services:
       - ./config:/app/config
       - ./picture:/app/picture
       - ./combine:/app/combine
+      - ./aichat_service:/app/aichat_service
       - ./manage.py:/app/manage.py
       - ./start.sh:/app/start.sh
       # 日誌目錄

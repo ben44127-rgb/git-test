@@ -41,74 +41,86 @@ class RecommendationEngine:
             推荐结果字典，包含虚拟试穿图片和分析
         """
         try:
-            # 第一层：AI 分析
-            logger.info("第一层：AI 分析用户输入")
-            keywords = self.ai_analyzer.analyze_user_input(user_input)
+            logger.info("第一层：获取用户的全部衣伺")
+            user_clothes = self.clothes_matcher.get_user_clothes_info()
             
-            if not keywords:
+            if not user_clothes:
                 return {
                     'success': False,
-                    'message': 'AI 分析失败'
+                    'message': '用户没有衣伺，无法进行推荐'
                 }
             
-            # 第二层：衣服篛选
-            logger.info("第二层：衣服篛选")
-            filter_result = self.clothes_matcher.filter_clothes_by_keywords(keywords)
+            logger.info("第二层：AI 分析用户输入并挑选衣伺")
+            ai_result = self.ai_analyzer.analyze_and_select_clothes(user_input, user_clothes)
             
-            top_candidates = filter_result.get('top_candidates', [])
-            bottom_candidates = filter_result.get('bottom_candidates', [])
-            
-            if not top_candidates or not bottom_candidates:
+            if not ai_result or not ai_result.get('top_clothes_uid') or not ai_result.get('bottom_clothes_uid'):
                 return {
                     'success': False,
-                    'message': '用户衣伺不足，无法进行推荐',
-                    'ai_keywords': keywords
+                    'message': 'AI 无法为您挑选合适的衣伺，请提供更多信息'
                 }
             
-            # 第三层：组合推荐
             logger.info("第三层：组合推荐")
+            top_clothes_obj = Clothes.objects.filter(clothes_uid=ai_result['top_clothes_uid']).first()
+            bottom_clothes_obj = Clothes.objects.filter(clothes_uid=ai_result['bottom_clothes_uid']).first()
+            
+            if not top_clothes_obj or not bottom_clothes_obj:
+                return {
+                    'success': False,
+                    'message': 'AI 挑选的衣伺无效'
+                }
+            
+            # 组装为后续需要的格式
+            top_clothes = {
+                'clothes_uid': str(top_clothes_obj.clothes_uid),
+                'clothes_category': top_clothes_obj.clothes_category,
+                'clothes_image_url': top_clothes_obj.clothes_image_url,
+                'matching_score': 0.95
+            }
+            bottom_clothes = {
+                'clothes_uid': str(bottom_clothes_obj.clothes_uid),
+                'clothes_category': bottom_clothes_obj.clothes_category,
+                'clothes_image_url': bottom_clothes_obj.clothes_image_url,
+                'matching_score': 0.95
+            }
+            
             recommendations = []
             
-            # 生成 top_k 个推荐
-            for rank in range(min(top_k, len(top_candidates), len(bottom_candidates))):
-                if rank >= len(top_candidates) or rank >= len(bottom_candidates):
-                    break
-                
-                top_clothes = top_candidates[rank]
-                bottom_clothes = bottom_candidates[rank]
-                
-                # 第四层：虚拟试穿
-                logger.info(f"第四层：虚拟试穿（推荐 {rank + 1}）")
-                tryon_result = await self._perform_virtual_tryon(
+            logger.info("第四层：虚拟试穿")
+            # 组装一个假的 keywords 以复用已有方法
+            fake_keywords = {
+                'recommended_styles': ai_result.get('recommended_styles', []),
+                'reasoning': ai_result.get('reasoning', '')
+            }
+            
+            tryon_result = await self._perform_virtual_tryon(
+                top_clothes,
+                bottom_clothes,
+                fake_keywords
+            )
+            
+            if tryon_result:
+                logger.info("第五层：保存推荐结果")
+                model_record = await self._save_recommendation(
                     top_clothes,
                     bottom_clothes,
-                    keywords
+                    tryon_result,
+                    user_input,
+                    fake_keywords,
+                    1
                 )
                 
-                if tryon_result:
-                    # 第五层：结果保存
-                    logger.info(f"第五层：保存推荐结果（推荐 {rank + 1}）")
-                    model_record = await self._save_recommendation(
-                        top_clothes,
-                        bottom_clothes,
-                        tryon_result,
-                        user_input,
-                        keywords,
-                        rank + 1
-                    )
-                    
-                    if model_record:
-                        recommendations.append({
-                            'rank': rank + 1,
-                            'model_uid': str(model_record.model_uid),
-                            'model_picture': model_record.model_picture,
-                            'recommendation_score': model_record.recommendation_score,
-                            'clothes_info': {
-                                'top': top_clothes,
-                                'bottom': bottom_clothes
-                            },
-                            'ai_reasoning': model_record.ai_analysis
-                        })
+                if model_record:
+                    recommendations.append({
+                        'rank': 1,
+                        'model_uid': str(model_record.model_uid),
+                        'model_picture': model_record.model_picture,
+                        'recommendation_score': model_record.recommendation_score,
+                        'clothes_info': {
+                            'top': top_clothes,
+                            'bottom': bottom_clothes
+                        },
+                        'ai_reasoning': ai_result.get('reasoning', '')
+                    })
             
             if not recommendations:
                 return {
@@ -119,7 +131,7 @@ class RecommendationEngine:
             return {
                 'success': True,
                 'message': '推荐穿搭生成成功',
-                'ai_keywords': keywords.get('recommended_styles', []),
+                'ai_keywords': ai_result.get('recommended_styles', []),
                 'recommendations': recommendations,
                 'total_recommendations': len(recommendations)
             }
@@ -231,7 +243,7 @@ class RecommendationEngine:
                 recommendation_context=user_input,
                 recommendation_keywords=keywords,
                 recommendation_score=recommendation_score,
-                ai_analysis=f"推荐排名：{rank}。{keywords.get('recommended_styles', [])} 风格的穿搭，搭配舒适和谐。"
+                ai_analysis=keywords.get('reasoning', f"推薦排名：{rank}。搭配舒適和諧。")
             )
             
             model.save()

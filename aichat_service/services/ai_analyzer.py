@@ -19,6 +19,60 @@ class AIAnalyzer:
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel('gemini-1.5-pro')
     
+    def analyze_and_select_clothes(self, user_input: str, user_clothes: List[Dict]) -> Optional[Dict]:
+        """
+        分析用户输入并直接从提供的衣伺列表中挑选合适的上下装
+        
+        Args:
+            user_input: 用户输入的文本
+            user_clothes: 用户的衣伺列表
+            
+        Returns:
+            包含挑选结果和推荐理由的字典
+        """
+        clothes_text = "\n".join([
+            f"- UID: {c['clothes_uid']}, 类别: {c['clothes_category']}, 颜色: {c.get('colors', [])}, 风格: {c.get('styles', [])}"
+            for c in user_clothes
+        ])
+
+        prompt = f"""
+你是一位专业的穿搭顾问。用户的需求如下：
+"{user_input}"
+
+以下是用户目前拥有的所有衣伺：
+{clothes_text}
+
+请根据用户的需求，从上述衣伺中挑选出一件合适的上装（top）和一件合适的下装（bottom）。
+请务必返回 JSON 格式的信息，包含你选择的衣服 UID，以及你提取的风格关键词和推荐理由：
+{{
+    "recommended_styles": ["Casual", "Sporty", ...],
+    "top_clothes_uid": "...",
+    "bottom_clothes_uid": "...",
+    "reasoning": "搭配理由..."
+}}
+
+注意：如果找不到合适的，请尽可能挑出最接近的一套。确保返回的 top_clothes_uid 和 bottom_clothes_uid 真实存在于上面的列表中。
+        """
+        
+        try:
+            response = self.model.generate_content(prompt)
+            text = response.text.strip()
+            
+            json_start = text.find('{')
+            json_end = text.rfind('}') + 1
+            
+            if json_start != -1 and json_end > json_start:
+                json_str = text[json_start:json_end]
+                result = json.loads(json_str)
+                return result
+            else:
+                logger.warning(f"无法从 Gemini 响应中提取 JSON：{text}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Gemini API 调用失败：{e}")
+            return None
+
     def analyze_user_input(self, user_input: str) -> Optional[Dict]:
         """
         分析用户输入，提取结构化关键词
